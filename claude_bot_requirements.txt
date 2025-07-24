@@ -1,0 +1,16 @@
+# Claude AI Enhanced Slack Bot Requirements
+slack-bolt==1.18.1
+supabase==2.3.4
+anthropic==0.7.8
+requests==2.31.0
+python-dotenv==1.0.0
+Pillow==10.1.0
+httpx==0.24.1
+websocket-client==1.6.1
+websockets==11.0.3
+typing-extensions==4.7.1
+pydantic==2.3.0
+certifi==2023.7.22
+charset-normalizer==3.2.0
+idna==3.4
+urllib3==2.0.4

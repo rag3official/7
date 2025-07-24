@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+We are creating a flutter app using @dart. The purpose of this app is to track van damage and to make it easy to track van's using van profiles created with the information that is in my google sheet. The google sheet will contain the following info, Van Number, Type, Status, Date, Last Updated, Notes,	URL, Driver, Damage, Rating. I need this app to automatically pull the data from my google sheet and to automatically either create a new van profile if that van doesn't already have a van profile, and if it does have a van profile then I need the app to automatically update the van profile with the new data. We will be using the google api for google sheet. 
+this is my pem "ssh -i ~/Downloads/supabase.pem ubuntu@3.15.163.231" and this is the script i needed updated "sudo systemctl start slack-supabase-bot" and "./setup.sh      My keys are in the .env file. Use "CD van_damamage_tracker" 

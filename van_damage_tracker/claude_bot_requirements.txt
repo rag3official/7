@@ -1,0 +1,24 @@
+# Enhanced Claude AI Slack Bot Requirements
+# Run: pip install -r claude_bot_requirements.txt
+
+# Core Slack Bot Framework
+slack-bolt==1.18.1
+
+# Supabase Database Client
+supabase==2.3.4
+
+# Claude AI API Client
+anthropic==0.7.8
+
+# HTTP Requests
+requests==2.31.0
+
+# Additional Dependencies
+python-dotenv==1.0.0
+Pillow==10.1.0
+
+# Async Support (if needed)
+asyncio-mqtt==0.13.0
+
+# Logging and Utilities
+colorlog==6.8.0

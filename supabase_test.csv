@@ -1,0 +1,4 @@
+van_number,type,status,date,last_updated,notes,url,driver,damage,damage_description
+test_van_1,Van,Active,2023-04-01,,Test notes,https://example.com/image.jpg,John Doe,Minor scratches,Few scratches on door
+test_van_2,Car,Inactive,2023-04-02,,More test notes,https://example.com/image2.jpg,Jane Smith,Dent,Small dent on bumper
+test_van_3,Truck,Active,2023-04-03,,,https://example.com/image3.jpg,,Clean,No damage 

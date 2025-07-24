@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "migrate": "python migrations/run_migrations.py"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.9",
+    "@types/node": "^22.15.29",
+    "dotenv": "^16.4.5",
+    "typescript": "^5.4.2",
+    "vitest": "^3.2.1"
+  },
+  "devDependencies": {
+    "@types/dotenv": "^8.2.0"
+  }
+}

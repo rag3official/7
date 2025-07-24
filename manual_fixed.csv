@@ -1,0 +1,3 @@
+van_number,type,status,date,last_updated,notes,url,driver,damage,damage_description
+van_test_1,Unknown,Active,2023-01-01,,,https://example.com,,Test damage,1
+van_test_2,Car,Active,2023-02-01,,,https://example.com/image.jpg,,Some scratches,2

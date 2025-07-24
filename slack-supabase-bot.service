@@ -1,0 +1,15 @@
+[Unit]
+Description=Slack Supabase Bot Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/slack-bot
+Environment=PATH=/home/ubuntu/slack-bot/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/ubuntu/slack-bot/venv/bin/python3 /home/ubuntu/slack-bot/slack_supabase_bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target 

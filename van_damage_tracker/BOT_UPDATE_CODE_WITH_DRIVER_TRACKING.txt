@@ -1,0 +1,105 @@
+# EXACT CODE TO ADD TO YOUR SLACK BOT WITH DRIVER TRACKING
+# Copy and paste these sections into your slack_supabase_bot.py file
+
+# ============================================
+# STEP 3: ADD THIS FUNCTION (around line 50, after imports)
+# ============================================
+
+def update_van_alerts_with_driver(van_id, damage_level, van_number, driver_name):
+    """Update van alerts based on damage level from Claude AI analysis and track the driver who caused it"""
+    try:
+        alert_flag = 'yes' if damage_level >= 2 else 'no'
+        
+        print(f"🚨 Updating alerts for van #{van_number}, damage level: {damage_level}, driver: {driver_name}")
+        logger.info(f"🚨 Updating alerts for van #{van_number}, damage level: {damage_level}, driver: {driver_name}")
+        
+        # Check if this van already has damage caused by someone else
+        existing_van = supabase.table('van_profiles').select('damage_caused_by, alerts').eq('id', van_id).execute()
+        
+        if existing_van.data:
+            existing_damage_caused_by = existing_van.data[0].get('damage_caused_by')
+            existing_alerts = existing_van.data[0].get('alerts', 'no')
+            
+            # Only update damage_caused_by if:
+            # 1. No previous damage was recorded, OR
+            # 2. Current damage is level 2+ and previous was level 0-1, OR  
+            # 3. This is the same driver causing new damage
+            should_update_driver = False
+            
+            if not existing_damage_caused_by:
+                # First time damage is being recorded
+                should_update_driver = True
+                print(f"🎯 First damage recorded for van #{van_number} by {driver_name}")
+            elif existing_alerts == 'no' and alert_flag == 'yes':
+                # Previous damage was minor, now it's serious
+                should_update_driver = True
+                print(f"🎯 Damage escalated for van #{van_number}, now caused by {driver_name}")
+            elif existing_damage_caused_by == driver_name:
+                # Same driver causing additional damage
+                should_update_driver = True
+                print(f"🎯 Same driver {driver_name} causing additional damage to van #{van_number}")
+            else:
+                # Different driver, but van already has serious damage from someone else
+                print(f"⚠️ Van #{van_number} already has damage from {existing_damage_caused_by}, not updating driver to {driver_name}")
+            
+            # Update the van profile
+            update_data = {
+                'alerts': alert_flag,
+                'updated_at': 'now()'
+            }
+            
+            if should_update_driver:
+                update_data['damage_caused_by'] = driver_name
+            
+            response = supabase.table('van_profiles').update(update_data).eq('id', van_id).execute()
+            
+            if response.data:
+                if alert_flag == 'yes':
+                    if should_update_driver:
+                        print(f"🚨 CRITICAL DAMAGE ALERT: Van #{van_number} flagged for level {damage_level} by {driver_name}")
+                        logger.info(f"🚨 CRITICAL DAMAGE ALERT: Van #{van_number} flagged for level {damage_level} by {driver_name}")
+                    else:
+                        print(f"🚨 CRITICAL DAMAGE ALERT: Van #{van_number} already flagged, damage from {existing_damage_caused_by}")
+                        logger.info(f"🚨 CRITICAL DAMAGE ALERT: Van #{van_number} already flagged, damage from {existing_damage_caused_by}")
+                return True
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error updating van alerts: {e}")
+        logger.error(f"❌ Error updating van alerts: {e}")
+        return False
+
+# ============================================
+# STEP 4: FIND THIS LINE IN YOUR BOT:
+# ============================================
+# logger.info(f"🎯 Claude analysis result: {claude_result}")
+
+# ============================================
+# STEP 5: ADD THIS CODE RIGHT AFTER THAT LINE:
+# ============================================
+
+        # Update van alerts based on damage level and track the driver
+        if 'van_rating' in claude_result:
+            damage_level = claude_result['van_rating']
+            driver_name = claude_result.get('driver_name', 'Unknown Driver')
+            print(f"🎯 Damage level detected: {damage_level} by {driver_name}")
+            
+            # Update alerts in database with driver tracking
+            alert_updated = update_van_alerts_with_driver(van_id, damage_level, van_number, driver_name)
+            
+            if alert_updated and damage_level >= 2:
+                print(f"🚨 HIGH DAMAGE ALERT: Van {van_number} requires immediate attention!")
+                logger.info(f"🚨 HIGH DAMAGE ALERT: Van {van_number} requires immediate attention!")
+
+# ============================================
+# INSTRUCTIONS:
+# ============================================
+# 1. First run the SQL migration: add_damage_caused_by_column.sql
+# 2. SSH into EC2: ssh -i ~/Downloads/supabase.pem ubuntu@3.15.163.231
+# 3. Stop bot: sudo systemctl stop slack-supabase-bot
+# 4. Edit file: sudo nano slack_supabase_bot.py
+# 5. Replace the old update_van_alerts function with this new one
+# 6. Update the call to use the new function with driver tracking
+# 7. Save: Ctrl+X, Y, Enter
+# 8. Start bot: sudo systemctl start slack-supabase-bot
+# 9. Check status: sudo systemctl status slack-supabase-bot 

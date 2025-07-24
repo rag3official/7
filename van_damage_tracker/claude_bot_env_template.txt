@@ -1,0 +1,16 @@
+# Enhanced Claude AI Slack Bot Environment Variables
+# Copy this to .env and fill in your actual values
+
+# Slack Bot Configuration
+SLACK_BOT_TOKEN=xoxb-your-bot-token-here
+SLACK_APP_TOKEN=xapp-your-app-token-here
+
+# Supabase Configuration
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-anon-key-here
+
+# Claude AI Configuration
+CLAUDE_API_KEY=sk-ant-your-claude-api-key-here
+
+# Optional: Logging Level
+LOG_LEVEL=INFO
