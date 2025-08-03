@@ -22,6 +22,7 @@ dependencies:
   provider: ^6.0.5
   intl: ^0.20.2
   logger: ^2.5.0
+  flutter_svg: ^2.0.9
 
 dev_dependencies:
   flutter_test:
@@ -31,4 +32,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - .env 
+    - .env
+    - assets/illustrations/premium_van.svg
+    - assets/illustrations/premium_driver.svg
+    - assets/illustrations/loading_animation.svg
+    - assets/illustrations/empty_state.svg 

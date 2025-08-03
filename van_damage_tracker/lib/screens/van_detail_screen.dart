@@ -25,14 +25,15 @@ class _VanDetailScreenState extends State<VanDetailScreen> {
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _damageDescriptionController =
       TextEditingController();
-  String _status = 'Active';
-  String _model = 'Ford Transit';
+  String _status = 'active';
+  String _model = 'Enterprise';
   final List<String> _statusOptions = [
-    'Active',
-    'Maintenance',
-    'Out of Service'
+    'active',
+    'maintenance',
+    'out_of_service'
   ];
   final List<String> _modelOptions = [
+    'Enterprise',
     'Ford Transit',
     'Mercedes Sprinter',
     'Iveco Daily'
@@ -56,7 +57,7 @@ class _VanDetailScreenState extends State<VanDetailScreen> {
       _plateNumberController.text = widget.van!.plateNumber;
       _model = _modelOptions.contains(widget.van!.model)
           ? widget.van!.model
-          : 'Ford Transit';
+          : 'Enterprise';
       _yearController.text = widget.van!.year;
       _statusController.text = widget.van!.status;
       _driverController.text = widget.van!.driverName ?? '';
@@ -65,8 +66,16 @@ class _VanDetailScreenState extends State<VanDetailScreen> {
       _damageDescriptionController.text = widget.van!.damageDescription ?? '';
       _status = _statusOptions.contains(widget.van!.status)
           ? widget.van!.status
-          : 'Active';
-      _rating = widget.van!.rating ?? '3';
+          : 'active';
+      final ratingValue = widget.van!.rating;
+      if (ratingValue == null ||
+          ratingValue.isEmpty ||
+          ratingValue == 'null' ||
+          ratingValue == '0') {
+        _rating = '3';
+      } else {
+        _rating = ratingValue;
+      }
       _imageUrl = widget.van!.url;
     }
   }
@@ -425,7 +434,7 @@ class _VanDetailScreenState extends State<VanDetailScreen> {
                       items: _modelOptions.map((String model) {
                         return DropdownMenuItem<String>(
                           value: model,
-                          child: Text(model),
+                          child: Text(_getModelDisplayName(model)),
                         );
                       }).toList(),
                       onChanged: (String? newValue) {
@@ -469,7 +478,7 @@ class _VanDetailScreenState extends State<VanDetailScreen> {
                       items: _statusOptions.map((String status) {
                         return DropdownMenuItem<String>(
                           value: status,
-                          child: Text(status),
+                          child: Text(_getStatusDisplayName(status)),
                         );
                       }).toList(),
                       onChanged: (String? newValue) {
@@ -668,6 +677,34 @@ class _VanDetailScreenState extends State<VanDetailScreen> {
       if (mounted) {
         setState(() => _isSaving = false);
       }
+    }
+  }
+
+  String _getModelDisplayName(String model) {
+    switch (model) {
+      case 'Enterprise':
+        return 'Enterprise';
+      case 'Ford Transit':
+        return 'Ford Transit';
+      case 'Mercedes Sprinter':
+        return 'Mercedes Sprinter';
+      case 'Iveco Daily':
+        return 'Iveco Daily';
+      default:
+        return model;
+    }
+  }
+
+  String _getStatusDisplayName(String status) {
+    switch (status) {
+      case 'active':
+        return 'Active';
+      case 'maintenance':
+        return 'Maintenance';
+      case 'out_of_service':
+        return 'Out of Service';
+      default:
+        return status;
     }
   }
 

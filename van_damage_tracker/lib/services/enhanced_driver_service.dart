@@ -198,122 +198,46 @@ class EnhancedDriverService {
   static Future<List<Map<String, dynamic>>> getDriverImagesByVan(
       String driverId) async {
     try {
-      debugPrint('🔍 Fetching images for driver: $driverId');
+      final response = await _supabase.rpc('get_driver_images_by_van',
+          params: {'p_driver_id': driverId, 'p_limit_per_van': 10});
 
-      // Get all images by this driver with van details
-      final response = await _supabase.from('van_images').select('''
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error fetching driver images by van: $e');
+      return [];
+    }
+  }
+
+  // Faster alternative method for loading driver images
+  static Future<List<Map<String, dynamic>>> getDriverImagesByVanFast(
+      String driverId) async {
+    try {
+      // Simple query that's much faster
+      final response = await _supabase
+          .from('van_images')
+          .select('''
             id,
             van_number,
-            van_id,
-            image_data,
             image_url,
             van_damage,
             van_rating,
             van_side,
-            damage_type,
-            damage_severity,
-            damage_location,
             created_at,
-            uploaded_by,
-            file_size,
-            content_type,
-            van_profiles!van_images_van_id_fkey (
-              id,
+            uploaded_at,
+            van_profiles!van_images_van_number_fkey(
               van_number,
               make,
               model,
               status
             )
-          ''').eq('driver_id', driverId).order('created_at', ascending: false);
+          ''')
+          .eq('driver_id', driverId)
+          .order('uploaded_at', ascending: false)
+          .limit(20); // Limit to prevent slow queries
 
-      debugPrint('📊 Found ${response.length} images for driver $driverId');
-
-      // Group images by van number with deduplication
-      Map<int, List<Map<String, dynamic>>> groupedImages = {};
-
-      for (final image in response) {
-        final vanNumber = image['van_number'] as int? ??
-            image['van_profiles']?['van_number'] as int? ??
-            0;
-
-        debugPrint(
-            '📷 Processing image: van_number=$vanNumber, has_image_data=${image['image_data'] != null}');
-        debugPrint(
-            '    Image data preview: ${image['image_data']?.toString().substring(0, 50) ?? 'null'}...');
-        debugPrint('    Image URL: ${image['image_url']}');
-        debugPrint('    Content type: ${image['content_type']}');
-        debugPrint('    File size: ${image['file_size']}');
-        debugPrint('    Van profile: ${image['van_profiles']}');
-
-        if (vanNumber > 0) {
-          if (!groupedImages.containsKey(vanNumber)) {
-            groupedImages[vanNumber] = [];
-          }
-
-          // Check for duplicates based on file size and content type
-          final fileSize = image['file_size'] as int? ?? 0;
-          final contentType = image['content_type']?.toString() ?? '';
-          final createdAt = image['created_at']?.toString() ?? '';
-
-          bool isDuplicate = false;
-          for (final existingImage in groupedImages[vanNumber]!) {
-            final existingFileSize = existingImage['file_size'] as int? ?? 0;
-            final existingContentType =
-                existingImage['content_type']?.toString() ?? '';
-            final existingCreatedAt =
-                existingImage['created_at']?.toString() ?? '';
-
-            // Consider it a duplicate if file size, content type match and created within 1 minute
-            if (fileSize == existingFileSize &&
-                contentType == existingContentType &&
-                fileSize > 0) {
-              final timeDiff = DateTime.tryParse(createdAt)
-                      ?.difference(DateTime.tryParse(existingCreatedAt) ??
-                          DateTime.now())
-                      ?.inMinutes
-                      ?.abs() ??
-                  999;
-              if (timeDiff <= 1) {
-                isDuplicate = true;
-                debugPrint(
-                    '🔄 Duplicate image detected: size=$fileSize, type=$contentType, time_diff=${timeDiff}min');
-                break;
-              }
-            }
-          }
-
-          if (!isDuplicate) {
-            groupedImages[vanNumber]!.add(image);
-          } else {
-            debugPrint('⚠️ Skipping duplicate image for van $vanNumber');
-          }
-        }
-      }
-
-      // Convert to list format expected by UI
-      List<Map<String, dynamic>> result = [];
-      groupedImages.forEach((vanNumber, images) {
-        final firstImage = images.first;
-        final vanProfile = firstImage['van_profiles'];
-
-        debugPrint(
-            '🚐 Van $vanNumber: ${images.length} images, make=${vanProfile?['make']}');
-
-        result.add({
-          'van_number': vanNumber,
-          'van_make': vanProfile?['make'] ?? 'Unknown',
-          'van_model': vanProfile?['model'] ?? 'Unknown',
-          'image_count': images.length,
-          'images': images,
-          'latest_image': images.first,
-        });
-      });
-
-      debugPrint(
-          '✅ Returning ${result.length} van groups for driver $driverId');
-      return result;
+      return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      debugPrint('❌ Error fetching driver images by van: $e');
+      print('Error fetching driver images (fast method): $e');
       return [];
     }
   }
@@ -392,6 +316,7 @@ class EnhancedDriverService {
             vanProfile['status'] ?? 'active', // Add this for UI compatibility
         'alerts':
             vanProfile['alerts'] ?? 'no', // Alert flag for damage level 2/3
+        'ratings': vanProfile['ratings'], // Add ratings from van_profiles table
         'updated_at': vanProfile['updated_at'],
         'notes': vanProfile['notes'],
         'van_id': vanProfile['id'],

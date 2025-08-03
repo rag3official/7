@@ -44,7 +44,7 @@ class VanGridItem extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            '#${van.vanNumber}',
+                            '#${van.plateNumber}',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
@@ -66,14 +66,14 @@ class VanGridItem extends StatelessWidget {
                     const SizedBox(height: 4),
                     // Van type and driver
                     Text(
-                      'Type: ${van.type}',
+                      'Type: ${van.model}',
                       style: const TextStyle(fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (van.driver.isNotEmpty)
+                    if (van.driverName?.isNotEmpty == true)
                       Text(
-                        'Driver: ${van.driver}',
+                        'Driver: ${van.driverName}',
                         style: const TextStyle(fontSize: 12),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

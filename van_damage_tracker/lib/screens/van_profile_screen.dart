@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import '../services/enhanced_driver_service.dart';
 import '../widgets/enhanced_image_viewer.dart';
 import '../widgets/van_status_dialog.dart';
+import '../widgets/modern_premium_components.dart';
+import '../widgets/modern_premium_background.dart';
+import '../widgets/enhanced_damage_alert.dart';
+import '../theme/modern_premium_theme.dart';
 import 'driver_profile_screen.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math' as math;
 
 class VanProfileScreen extends StatefulWidget {
   final int vanNumber;
@@ -18,27 +23,147 @@ class VanProfileScreen extends StatefulWidget {
   State<VanProfileScreen> createState() => _VanProfileScreenState();
 }
 
-class _VanProfileScreenState extends State<VanProfileScreen> {
+class _VanProfileScreenState extends State<VanProfileScreen>
+    with TickerProviderStateMixin {
   Map<String, dynamic>? vanData;
   bool isLoading = true;
   String? error;
-  Timer? _refreshTimer;
+
+  // Animation controllers for luxury effects
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late AnimationController _scaleController;
+  late AnimationController _breathingController;
+  late AnimationController _shimmerController;
+  late AnimationController _particleController;
+  late AnimationController _rotationController;
+
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _breathingAnimation;
+  late Animation<double> _shimmerAnimation;
+  late Animation<double> _particleAnimation;
+  late Animation<double> _rotationAnimation;
 
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     _loadVanData();
+  }
 
-    // Auto-refresh every 30 seconds to check for new Slack uploads
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      debugPrint('🔄 Auto-refresh triggered for Van #${widget.vanNumber}');
-      _loadVanData();
-    });
+  void _initializeAnimations() {
+    // Fade in animation
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    // Slide up animation
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    // Scale animation for cards
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _scaleController,
+      curve: Curves.elasticOut,
+    ));
+
+    // Breathing animation for premium elements
+    _breathingController = AnimationController(
+      duration: const Duration(seconds: 4),
+      vsync: this,
+    );
+    _breathingAnimation = Tween<double>(
+      begin: 0.95,
+      end: 1.05,
+    ).animate(CurvedAnimation(
+      parent: _breathingController,
+      curve: Curves.easeInOut,
+    ));
+
+    // Shimmer animation
+    _shimmerController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+    _shimmerAnimation = Tween<double>(
+      begin: -1.0,
+      end: 2.0,
+    ).animate(CurvedAnimation(
+      parent: _shimmerController,
+      curve: Curves.easeInOut,
+    ));
+
+    // Particle animation
+    _particleController = AnimationController(
+      duration: const Duration(seconds: 3),
+      vsync: this,
+    );
+    _particleAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _particleController,
+      curve: Curves.easeInOut,
+    ));
+
+    // Rotation animation for van icon
+    _rotationController = AnimationController(
+      duration: const Duration(seconds: 6),
+      vsync: this,
+    );
+    _rotationAnimation = Tween<double>(
+      begin: 0.0,
+      end: 2 * math.pi,
+    ).animate(CurvedAnimation(
+      parent: _rotationController,
+      curve: Curves.linear,
+    ));
+
+    // Start animations
+    _fadeController.forward();
+    _slideController.forward();
+    _scaleController.forward();
+    _breathingController.repeat(reverse: true);
+    _shimmerController.repeat();
+    _particleController.repeat();
+    _rotationController.repeat();
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _fadeController.dispose();
+    _slideController.dispose();
+    _scaleController.dispose();
+    _breathingController.dispose();
+    _shimmerController.dispose();
+    _particleController.dispose();
+    _rotationController.dispose();
     super.dispose();
   }
 
@@ -83,156 +208,801 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('🚐 Van #${widget.vanNumber}'),
-        backgroundColor: Colors.green[400],
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          // Refresh button
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              debugPrint(
-                  '🔄 Manual refresh triggered for Van #${widget.vanNumber}');
-              _loadVanData();
-            },
-            tooltip: 'Refresh van data',
-          ),
-          // Test button to verify EnhancedImageViewer works
-          if (vanData != null && (vanData!['images'] as List? ?? []).isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.bug_report),
-              onPressed: () {
-                debugPrint('🧪 TEST BUTTON: Opening EnhancedImageViewer...');
-                final images = vanData!['images'] as List? ?? [];
-                final imageList = images.cast<Map<String, dynamic>>();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => EnhancedImageViewer(
-                      images: imageList,
-                      initialIndex: 0,
-                      title: 'Van #${widget.vanNumber} Images - TEST',
-                    ),
-                  ),
-                );
-              },
-              tooltip: 'Test Image Viewer',
-            ),
-        ],
-      ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : error != null
-              ? _buildErrorWidget()
-              : RefreshIndicator(
-                  onRefresh: _loadVanData,
-                  child: _buildVanProfile(),
-                ),
-    );
-  }
+    return Stack(
+      children: [
+        // Premium animated backdrop
+        _buildPremiumBackdrop(),
 
-  Widget _buildErrorWidget() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading van profile',
-              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error!,
-              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadVanData,
-              child: const Text('Retry'),
-            ),
-          ],
+        // Main content
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: _buildLuxuryAppBar(),
+          body: isLoading
+              ? _buildLuxuryLoadingScreen()
+              : error != null
+                  ? _buildLuxuryErrorScreen()
+                  : _buildLuxuryContent(),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildVanProfile() {
-    if (vanData == null) {
-      return const Center(child: Text('No van data available'));
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildVanInfoCard(),
-          const SizedBox(height: 16),
-          _buildVanStatusCard(),
-          const SizedBox(height: 16),
-          _buildDamageAssessmentCard(),
-          const SizedBox(height: 16),
-          _buildImageStatsCard(),
-          const SizedBox(height: 16),
-          _buildImagesSection(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVanInfoCard() {
-    final vanMake = vanData!['van_make']?.toString() ?? 'Unknown';
-    final vanModel = vanData!['van_model']?.toString() ?? 'Unknown';
-    final vanYear = vanData!['van_year']?.toString() ?? 'Unknown';
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '🚐 Van Information',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  Widget _buildPremiumBackdrop() {
+    return AnimatedBuilder(
+      animation: _particleAnimation,
+      builder: (context, child) {
+        return Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF0A0A0F),
+                Color(0xFF1A1A2E),
+                Color(0xFF16213E),
+                Color(0xFF0F3460),
+                Color(0xFF533483),
+                Color(0xFF8B5CF6),
+                Color(0xFF6366F1),
+                Color(0xFF3B82F6),
+                Color(0xFF0EA5E9),
+                Color(0xFF06B6D4),
+              ],
+              stops: [
+                0.0,
+                0.1,
+                0.2,
+                0.3,
+                0.4,
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                1.0,
+              ],
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.local_shipping, color: Colors.green[400], size: 48),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Van #${widget.vanNumber}',
-                        style: const TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$vanYear $vanMake $vanModel',
-                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          ),
+          child: Stack(
+            children: [
+              // Animated geometric patterns
+              _buildGeometricPatterns(),
+
+              // Floating particles
+              _buildFloatingParticles(),
+
+              // Gradient overlays
+              _buildGradientOverlays(),
+
+              // Subtle noise texture
+              _buildNoiseTexture(),
+
+              // Animated light rays
+              _buildLightRays(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGeometricPatterns() {
+    return AnimatedBuilder(
+      animation: _rotationAnimation,
+      builder: (context, child) {
+        return CustomPaint(
+          painter: GeometricPatternPainter(
+            animation: _rotationAnimation,
+            particleAnimation: _particleAnimation,
+          ),
+          size: Size.infinite,
+        );
+      },
+    );
+  }
+
+  Widget _buildFloatingParticles() {
+    return AnimatedBuilder(
+      animation: _particleAnimation,
+      builder: (context, child) {
+        return Stack(
+          children: List.generate(50, (index) {
+            final progress = (_particleAnimation.value + index * 0.02) % 1.0;
+            final x = (index * 37.5) % MediaQuery.of(context).size.width;
+            final y = (progress * MediaQuery.of(context).size.height * 2) -
+                MediaQuery.of(context).size.height;
+
+            return Positioned(
+              left: x,
+              top: y,
+              child: Transform.scale(
+                scale: 0.5 + 0.5 * math.sin(progress * 2 * math.pi),
+                child: Container(
+                  width: 2 + (index % 3) * 2,
+                  height: 2 + (index % 3) * 2,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        ModernPremiumTheme.primaryNeon.withOpacity(0.8),
+                        ModernPremiumTheme.primaryNeon.withOpacity(0.4),
+                        Colors.transparent,
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ModernPremiumTheme.primaryNeon.withOpacity(0.3),
+                        blurRadius: 8,
+                        spreadRadius: 2,
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  Widget _buildGradientOverlays() {
+    return AnimatedBuilder(
+      animation: _breathingAnimation,
+      builder: (context, child) {
+        return Stack(
+          children: [
+            // Top-left gradient
+            Positioned(
+              top: -100,
+              left: -100,
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      ModernPremiumTheme.primaryNeon
+                          .withOpacity(0.1 * _breathingAnimation.value),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Bottom-right gradient
+            Positioned(
+              bottom: -100,
+              right: -100,
+              child: Container(
+                width: 400,
+                height: 400,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      ModernPremiumTheme.secondaryElectric
+                          .withOpacity(0.08 * _breathingAnimation.value),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Center gradient
+            Positioned(
+              top: MediaQuery.of(context).size.height * 0.3,
+              left: MediaQuery.of(context).size.width * 0.1,
+              child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      ModernPremiumTheme.accentHotPink
+                          .withOpacity(0.05 * _breathingAnimation.value),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildNoiseTexture() {
+    return AnimatedBuilder(
+      animation: _shimmerAnimation,
+      builder: (context, child) {
+        return Opacity(
+          opacity: 0.03,
+          child: CustomPaint(
+            painter: NoiseTexturePainter(
+              animation: _shimmerAnimation,
+            ),
+            size: Size.infinite,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLightRays() {
+    return AnimatedBuilder(
+      animation: _rotationAnimation,
+      builder: (context, child) {
+        return CustomPaint(
+          painter: LightRaysPainter(
+            animation: _rotationAnimation,
+            breathingAnimation: _breathingAnimation,
+          ),
+          size: Size.infinite,
+        );
+      },
+    );
+  }
+
+  PreferredSizeWidget _buildLuxuryAppBar() {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: Container(
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [
+              ModernPremiumTheme.primaryNeon.withOpacity(0.2),
+              ModernPremiumTheme.secondaryElectric.withOpacity(0.2),
+            ],
+          ),
+          border: Border.all(
+            color: ModernPremiumTheme.primaryNeon.withOpacity(0.3),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: ModernPremiumTheme.primaryNeon.withOpacity(0.2),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: IconButton(
+          icon: AnimatedBuilder(
+            animation: _breathingAnimation,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _breathingAnimation.value,
+                child: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: ModernPremiumTheme.textDiamond,
+                  size: 20,
+                ),
+              );
+            },
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      title: AnimatedBuilder(
+        animation: _fadeAnimation,
+        builder: (context, child) {
+          return FadeTransition(
+            opacity: _fadeAnimation,
+            child: Row(
+              children: [
+                AnimatedBuilder(
+                  animation: _rotationAnimation,
+                  builder: (context, child) {
+                    return Transform.rotate(
+                      angle: _rotationAnimation.value,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: ModernPremiumTheme.neonGradient,
+                        ),
+                        child: const Icon(
+                          Icons.local_shipping_rounded,
+                          color: ModernPremiumTheme.textDiamond,
+                          size: 20,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Van #${widget.vanNumber}',
+                      style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Fleet Management',
+                      style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                        fontSize: 10,
+                        color: ModernPremiumTheme.textDiamond.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      actions: [
+        // Refresh button with luxury design
+        Container(
+          width: 48,
+          height: 48,
+          margin: const EdgeInsets.only(right: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: ModernPremiumTheme.neonGradient,
+            boxShadow: [
+              BoxShadow(
+                color: ModernPremiumTheme.primaryNeon.withOpacity(0.3),
+                blurRadius: 12,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                debugPrint(
+                    '🔄 Manual refresh triggered for Van #${widget.vanNumber}');
+                _loadVanData();
+              },
+              child: AnimatedBuilder(
+                animation: _shimmerAnimation,
+                builder: (context, child) {
+                  return ShaderMask(
+                    shaderCallback: (bounds) {
+                      return LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          ModernPremiumTheme.textDiamond.withOpacity(0.3),
+                          Colors.transparent,
+                        ],
+                        stops: [
+                          _shimmerAnimation.value - 0.3,
+                          _shimmerAnimation.value,
+                          _shimmerAnimation.value + 0.3,
+                        ],
+                      ).createShader(bounds);
+                    },
+                    child: const Icon(
+                      Icons.refresh_rounded,
+                      color: ModernPremiumTheme.textDiamond,
+                      size: 24,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+        // Settings button with luxury design
+        Container(
+          width: 48,
+          height: 48,
+          margin: const EdgeInsets.only(right: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: ModernPremiumTheme.neonGradient,
+            boxShadow: [
+              BoxShadow(
+                color: ModernPremiumTheme.primaryNeon.withOpacity(0.3),
+                blurRadius: 12,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                // Add settings functionality here
+              },
+              child: const Icon(
+                Icons.settings_rounded,
+                color: ModernPremiumTheme.textDiamond,
+                size: 24,
+              ),
+            ),
+          ),
+        ),
+        // Premium status indicator
+        AnimatedBuilder(
+          animation: _breathingAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _breathingAnimation.value,
+              child: Container(
+                margin: const EdgeInsets.only(right: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      ModernPremiumTheme.successElectric.withOpacity(0.8),
+                      ModernPremiumTheme.secondaryElectric.withOpacity(0.6),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: ModernPremiumTheme.successElectric.withOpacity(0.3),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          ModernPremiumTheme.successElectric.withOpacity(0.3),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: ModernPremiumTheme.textDiamond,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'LIVE',
+                      style: TextStyle(
+                        color: ModernPremiumTheme.textDiamond,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLuxuryLoadingScreen() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedBuilder(
+            animation: _breathingAnimation,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _breathingAnimation.value,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: ModernPremiumTheme.neonGradient,
+                    boxShadow: [
+                      BoxShadow(
+                        color: ModernPremiumTheme.primaryNeon.withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: AnimatedBuilder(
+                    animation: _rotationAnimation,
+                    builder: (context, child) {
+                      return Transform.rotate(
+                        angle: _rotationAnimation.value,
+                        child: const Icon(
+                          Icons.local_shipping_rounded,
+                          color: ModernPremiumTheme.textDiamond,
+                          size: 60,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 32),
+          AnimatedBuilder(
+            animation: _fadeAnimation,
+            builder: (context, child) {
+              return FadeTransition(
+                opacity: _fadeAnimation,
+                child: Text(
+                  'Loading Van #${widget.vanNumber}',
+                  style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          AnimatedBuilder(
+            animation: _shimmerAnimation,
+            builder: (context, child) {
+              return ShaderMask(
+                shaderCallback: (bounds) {
+                  return LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      ModernPremiumTheme.textDiamond.withOpacity(0.5),
+                      Colors.transparent,
+                    ],
+                    stops: [
+                      _shimmerAnimation.value - 0.3,
+                      _shimmerAnimation.value,
+                      _shimmerAnimation.value + 0.3,
+                    ],
+                  ).createShader(bounds);
+                },
+                child: Text(
+                  'Preparing luxury experience...',
+                  style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                    color: ModernPremiumTheme.textDiamond.withOpacity(0.8),
+                    fontSize: 16,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLuxuryErrorScreen() {
+    return Center(
+      child: ModernPremiumCard(
+        enableGlass: true,
+        enableNeonEffect: true,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: _breathingAnimation,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _breathingAnimation.value,
+                    child: Icon(
+                      Icons.error_outline,
+                      size: 80,
+                      color: ModernPremiumTheme.errorHotPink,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Error Loading Van Data',
+                style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                error!,
+                style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                  color: ModernPremiumTheme.textDiamond.withOpacity(0.8),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ModernPremiumButton(
+                text: 'Retry',
+                onPressed: _loadVanData,
+                icon: Icons.refresh_rounded,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildVanStatusCard() {
+  Widget _buildLuxuryContent() {
+    return AnimatedBuilder(
+      animation: _fadeAnimation,
+      builder: (context, child) {
+        return FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLuxuryVanInfoCard(),
+                    const SizedBox(height: 24),
+                    _buildLuxuryVanStatusCard(),
+                    const SizedBox(height: 24),
+                    _buildLuxuryDamageAssessmentCard(),
+                    const SizedBox(height: 24),
+                    _buildLuxuryImageStatsCard(),
+                    const SizedBox(height: 24),
+                    _buildLuxuryImagesSection(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLuxuryVanInfoCard() {
+    final vanMake = vanData!['van_make']?.toString() ?? 'Unknown';
+    final vanModel = vanData!['van_model']?.toString() ?? 'Unknown';
+    final vanYear = vanData!['van_year']?.toString() ?? 'Unknown';
+
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: ModernPremiumCard(
+            enableGlass: true,
+            enableNeonEffect: true,
+            enableFloatingAnimation: true,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ModernPremiumTheme.deepSpace.withOpacity(0.8),
+                    ModernPremiumTheme.cosmicPurple.withOpacity(0.6),
+                  ],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: ModernPremiumTheme.neonGradient,
+                        ),
+                        child: const Icon(
+                          Icons.info_outline,
+                          color: ModernPremiumTheme.textDiamond,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        '🚐 Van Information',
+                        style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      AnimatedBuilder(
+                        animation: _breathingAnimation,
+                        builder: (context, child) {
+                          return Transform.scale(
+                            scale: _breathingAnimation.value,
+                            child: Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: ModernPremiumTheme.neonGradient,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: ModernPremiumTheme.primaryNeon
+                                        .withOpacity(0.3),
+                                    blurRadius: 15,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: Container(
+                                margin: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: ModernPremiumTheme.deepSpace,
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.local_shipping_rounded,
+                                    color: ModernPremiumTheme.textDiamond,
+                                    size: 40,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Van #${widget.vanNumber}',
+                              style:
+                                  ModernPremiumTheme.neonHeadingStyle.copyWith(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '$vanYear $vanMake $vanModel',
+                              style:
+                                  ModernPremiumTheme.modernBodyStyle.copyWith(
+                                fontSize: 16,
+                                color: ModernPremiumTheme.textDiamond
+                                    .withOpacity(0.8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLuxuryVanStatusCard() {
     final vanStatus = vanData!['status']?.toString() ?? 'active';
     final vanUpdatedAt = vanData!['updated_at']?.toString();
     final vanNotes = vanData!['notes']?.toString();
@@ -243,219 +1013,396 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
     Color statusColor = _getStatusColor(vanStatus);
     IconData statusIcon = _getStatusIcon(vanStatus);
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with title and change button
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.blue[400], size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      '🚗 Van Status',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: ModernPremiumCard(
+            enableGlass: true,
+            enableNeonEffect: true,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ModernPremiumTheme.deepSpace.withOpacity(0.8),
+                    ModernPremiumTheme.cosmicPurple.withOpacity(0.6),
                   ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: () => _showStatusDialog(),
-                  icon: const Icon(Icons.edit, size: 16),
-                  label: const Text('Change Status'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[400],
-                    foregroundColor: Colors.white,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    textStyle: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Current status display
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: statusColor, width: 2),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(statusIcon, color: statusColor, size: 24),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              statusConfig['label'],
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: statusColor,
-                              ),
-                            ),
-                            Text(
-                              statusConfig['description'],
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: statusColor.withOpacity(0.8),
-                              ),
-                            ),
-                          ],
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: ModernPremiumTheme.neonGradient,
+                        ),
+                        child: const Icon(
+                          Icons.info_outline,
+                          color: ModernPremiumTheme.textDiamond,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        '🚗 Van Status',
+                        style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        onPressed: () => _showStatusDialog(),
+                        icon: const Icon(Icons.edit_rounded, size: 16),
+                        label: const Text('Change Status'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: ModernPremiumTheme.primaryNeon,
+                          foregroundColor: ModernPremiumTheme.textDiamond,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 12),
                         ),
                       ),
                     ],
                   ),
-
-                  // Status change timestamp
-                  if (vanUpdatedAt != null) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Last updated: ${_formatStatusDate(vanUpdatedAt)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
+                  const SizedBox(height: 20),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: statusColor, width: 2),
                     ),
-                  ],
-
-                  // Status notes
-                  if (vanNotes != null && vanNotes.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.note,
-                                  size: 16, color: Colors.grey[700]),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Notes:',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey[700],
-                                ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(statusIcon, color: statusColor, size: 24),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    statusConfig['label'],
+                                    style: ModernPremiumTheme.neonHeadingStyle
+                                        .copyWith(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: statusColor,
+                                    ),
+                                  ),
+                                  Text(
+                                    statusConfig['description'],
+                                    style: ModernPremiumTheme.modernBodyStyle
+                                        .copyWith(
+                                      fontSize: 14,
+                                      color: ModernPremiumTheme.textDiamond
+                                          .withOpacity(0.8),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            vanNotes,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[800],
+                            ),
+                          ],
+                        ),
+                        if (vanNotes != null && vanNotes.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: ModernPremiumTheme.textDiamond
+                                  .withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Notes: $vanNotes',
+                              style:
+                                  ModernPremiumTheme.modernBodyStyle.copyWith(
+                                fontSize: 12,
+                                color: ModernPremiumTheme.textDiamond
+                                    .withOpacity(0.8),
+                                fontStyle: FontStyle.italic,
+                              ),
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // Quick status indicators for all statuses
-            const SizedBox(height: 16),
-            const Text(
-              'Status Options:',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: EnhancedDriverService.availableStatuses.map((status) {
-                final config = EnhancedDriverService.statusConfig[status]!;
-                final isActive = status == vanStatus;
-                final color = _getStatusColor(status);
-
-                return Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                    decoration: BoxDecoration(
-                      color:
-                          isActive ? color.withOpacity(0.2) : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: isActive ? color : Colors.grey[300]!,
-                        width: isActive ? 2 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          _getStatusIcon(status),
-                          color: isActive ? color : Colors.grey[600],
-                          size: 16,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          config['label'],
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight:
-                                isActive ? FontWeight.bold : FontWeight.normal,
-                            color: isActive ? color : Colors.grey[600],
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
                       ],
                     ),
                   ),
-                );
-              }).toList(),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  void _showStatusDialog() {
-    final vanStatus = vanData!['status']?.toString() ?? 'active';
+  Widget _buildLuxuryImageStatsCard() {
+    final images = vanData!['images'] as List? ?? [];
+    final imageCount = images.length;
 
-    showVanStatusDialog(
-      context,
-      vanNumber: widget.vanNumber,
-      currentStatus: vanStatus,
-      onStatusChanged: (newStatus) {
-        // Reload van data to reflect the status change
-        _loadVanData();
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: ModernPremiumCard(
+            enableGlass: true,
+            enableNeonEffect: true,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ModernPremiumTheme.deepSpace.withOpacity(0.8),
+                    ModernPremiumTheme.cosmicPurple.withOpacity(0.6),
+                  ],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: ModernPremiumTheme.neonGradient,
+                        ),
+                        child: const Icon(
+                          Icons.photo_library_rounded,
+                          color: ModernPremiumTheme.textDiamond,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        '📊 Image Statistics',
+                        style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildLuxuryStatItem(
+                        'Total Images',
+                        imageCount.toString(),
+                        Icons.image_rounded,
+                        ModernPremiumTheme.primaryNeon,
+                      ),
+                      _buildLuxuryStatItem(
+                        'Damage Levels',
+                        _getUniqueDamageLevels(images).toString(),
+                        Icons.analytics_rounded,
+                        ModernPremiumTheme.secondaryElectric,
+                      ),
+                      _buildLuxuryStatItem(
+                        'Last Updated',
+                        _getLastUpdateTime(images),
+                        Icons.schedule_rounded,
+                        ModernPremiumTheme.accentHotPink,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
       },
     );
+  }
+
+  Widget _buildLuxuryStatItem(
+      String label, String value, IconData icon, Color color) {
+    return AnimatedBuilder(
+      animation: _breathingAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _breathingAnimation.value,
+          child: Column(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      color.withOpacity(0.2),
+                      color.withOpacity(0.1),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: color.withOpacity(0.3),
+                    width: 2,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  size: 28,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                  fontSize: 10,
+                  color: ModernPremiumTheme.textDiamond.withOpacity(0.7),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLuxuryImagesSection() {
+    final images = vanData!['images'] as List? ?? [];
+
+    if (images.isEmpty) {
+      return AnimatedBuilder(
+        animation: _scaleAnimation,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scaleAnimation.value,
+            child: ModernPremiumCard(
+              enableGlass: true,
+              enableNeonEffect: true,
+              child: Container(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      ModernPremiumTheme.deepSpace.withOpacity(0.8),
+                      ModernPremiumTheme.cosmicPurple.withOpacity(0.6),
+                    ],
+                  ),
+                ),
+                child: Center(
+                  child: Column(
+                    children: [
+                      AnimatedBuilder(
+                        animation: _breathingAnimation,
+                        builder: (context, child) {
+                          return Transform.scale(
+                            scale: _breathingAnimation.value,
+                            child: Icon(
+                              Icons.image_not_supported_rounded,
+                              size: 64,
+                              color: ModernPremiumTheme.textDiamond
+                                  .withOpacity(0.5),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No images available',
+                        style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                          fontSize: 16,
+                          color:
+                              ModernPremiumTheme.textDiamond.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: ModernPremiumTheme.neonGradient,
+              ),
+              child: const Icon(
+                Icons.photo_library_rounded,
+                color: ModernPremiumTheme.textDiamond,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              '🖼️ Van Images',
+              style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildImagesSection(),
+      ],
+    );
+  }
+
+  int _getUniqueDamageLevels(List images) {
+    final levels = images.map((img) => img['van_rating'] ?? 0).toSet();
+    return levels.length;
+  }
+
+  String _getLastUpdateTime(List images) {
+    if (images.isEmpty) return 'N/A';
+
+    final latestImage = images.first;
+    final createdAt = latestImage['created_at'];
+    if (createdAt == null) return 'N/A';
+
+    try {
+      final date = DateTime.parse(createdAt);
+      return '${date.month}/${date.day}';
+    } catch (e) {
+      return 'N/A';
+    }
   }
 
   Color _getStatusColor(String status) {
@@ -484,35 +1431,21 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
     }
   }
 
-  String _formatStatusDate(String dateString) {
-    try {
-      final date = DateTime.parse(dateString);
-      final now = DateTime.now();
-      final difference = now.difference(date);
+  void _showStatusDialog() {
+    final vanStatus = vanData!['status']?.toString() ?? 'active';
 
-      if (difference.inDays == 0) {
-        final hours = difference.inHours;
-        final minutes = difference.inMinutes;
-        if (hours > 0) {
-          return '$hours hour${hours > 1 ? 's' : ''} ago';
-        } else if (minutes > 0) {
-          return '$minutes minute${minutes > 1 ? 's' : ''} ago';
-        } else {
-          return 'Just now';
-        }
-      } else if (difference.inDays == 1) {
-        return 'Yesterday';
-      } else if (difference.inDays < 7) {
-        return '${difference.inDays} days ago';
-      } else {
-        return '${date.month}/${date.day}/${date.year}';
-      }
-    } catch (e) {
-      return 'Unknown';
-    }
+    showVanStatusDialog(
+      context,
+      vanNumber: widget.vanNumber,
+      currentStatus: vanStatus,
+      onStatusChanged: (newStatus) {
+        // Reload van data to reflect the status change
+        _loadVanData();
+      },
+    );
   }
 
-  Widget _buildDamageAssessmentCard() {
+  Widget _buildLuxuryDamageAssessmentCard() {
     final images = vanData!['images'] as List? ?? [];
 
     // First, check if we have van-level damage data (from the model field which contains damage rating)
@@ -566,11 +1499,33 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
     Map<String, dynamic>? worstDamageImage;
     int highestRating = vanLevelRating ?? 0;
 
+    // Calculate damage statistics
+    int noDamage = 0;
+    int minorDamage = 0;
+    int moderateDamage = 0;
+    int majorDamage = 0;
+
     for (final image in images) {
       final imageRating = image['van_rating'] as int? ?? 0;
       if (imageRating > highestRating) {
         highestRating = imageRating;
         worstDamageImage = image;
+      }
+
+      // Count damage levels
+      switch (imageRating) {
+        case 0:
+          noDamage++;
+          break;
+        case 1:
+          minorDamage++;
+          break;
+        case 2:
+          moderateDamage++;
+          break;
+        case 3:
+          majorDamage++;
+          break;
       }
     }
 
@@ -643,165 +1598,333 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
       }
     }
 
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-        border: finalRating >= 2
-            ? Border.all(color: getRatingColor(finalRating), width: 2)
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                finalRating >= 2 ? Icons.warning : Icons.assessment,
-                color: finalRating >= 2
-                    ? getRatingColor(finalRating)
-                    : Colors.blue,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                finalRating >= 2
-                    ? '⚠️ Main Damage Assessment'
-                    : '✅ Damage Assessment',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: finalRating >= 2
-                      ? getRatingColor(finalRating)
-                      : Colors.blue[800],
+    return ModernPremiumCard(
+      enableGlass: true,
+      enableNeonEffect: true,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: finalRating >= 2
+                        ? getRatingColor(finalRating).withOpacity(0.2)
+                        : Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    finalRating >= 2
+                        ? Icons.warning_amber_rounded
+                        : Icons.assessment,
+                    color: finalRating >= 2
+                        ? getRatingColor(finalRating)
+                        : Colors.blue[600],
+                    size: 24,
+                  ),
                 ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          // Illustrated Van Icon with Damage Indicators
-          _buildIllustratedVanIcon(images),
-
-          const SizedBox(height: 12),
-
-          // Main damage highlight banner
-          if (finalRating >= 2)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: getRatingColor(finalRating).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: getRatingColor(finalRating), width: 1),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.priority_high,
-                          color: getRatingColor(finalRating), size: 16),
-                      const SizedBox(width: 4),
                       Text(
-                        'NEEDS ATTENTION: $finalLocation',
+                        finalRating >= 2
+                            ? '⚠️ DAMAGE ALERT'
+                            : '✅ Damage Assessment',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: getRatingColor(finalRating),
+                          color: finalRating >= 2
+                              ? getRatingColor(finalRating)
+                              : Colors.blue[800],
+                        ),
+                      ),
+                      Text(
+                        'Level $finalRating - ${getRatingDescription(finalRating)}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: finalRating >= 2
+                              ? getRatingColor(finalRating).withOpacity(0.8)
+                              : Colors.grey[600],
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'This side has the most damage and requires priority attention.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: getRatingColor(finalRating),
-                      fontStyle: FontStyle.italic,
+                ),
+                // Damage level badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        getRatingColor(finalRating),
+                        getRatingColor(finalRating).withOpacity(0.8),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: getRatingColor(finalRating).withOpacity(0.3),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    'L$finalRating',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Enhanced Damage Statistics Section
+            DamageStatisticsCard(
+              damageStats: {
+                'L0': noDamage,
+                'L1': minorDamage,
+                'L2': moderateDamage,
+                'L3': majorDamage,
+              },
+              selectedLevel: finalRating >= 2 ? 'L$finalRating' : null,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Illustrated Van Icon with Damage Indicators
+            _buildIllustratedVanIcon(images),
+
+            const SizedBox(height: 12),
+
+            // Enhanced Damage Alert - More Visible
+            if (finalRating >= 2)
+              EnhancedDamageAlert(
+                damageLevel: getRatingDescription(finalRating).split(' ')[0],
+                damageDescription: finalDamageDescription,
+                damageType: finalDamageType,
+                customColor: getRatingColor(finalRating),
+                onTap: () {
+                  // Handle damage alert tap
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content:
+                          Text('Viewing damage details for $finalLocation'),
+                      backgroundColor: getRatingColor(finalRating),
+                    ),
+                  );
+                },
+                onViewDetails: () {
+                  // Show detailed damage information
+                  _showDamageDetailsDialog(context, finalRating,
+                      finalDamageDescription, finalDamageType, finalLocation);
+                },
+                onReportDamage: () {
+                  // Open damage report form
+                  _showDamageReportDialog(context);
+                },
+              ),
+
+            if (finalRating >= 2) const SizedBox(height: 12),
+
+            // Rating section
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.grey[50]!,
+                    Colors.white,
+                    Colors.grey[50]!,
+                    Colors.white,
+                  ],
+                  stops: const [0.0, 0.3, 0.7, 1.0],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                    spreadRadius: 2,
+                  ),
+                ],
+                border: Border.all(
+                  color: Colors.grey[200]!,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.blue[600]!,
+                          Colors.blue[500]!,
+                          Colors.blue[600]!,
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blue.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      'Rating: ',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(
+                            offset: const Offset(0, 1),
+                            blurRadius: 2,
+                            color: Colors.black.withOpacity(0.3),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          getRatingColor(finalRating),
+                          getRatingColor(finalRating).withOpacity(0.8),
+                          getRatingColor(finalRating),
+                          getRatingColor(finalRating).withOpacity(0.9),
+                        ],
+                        stops: const [0.0, 0.3, 0.7, 1.0],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: getRatingColor(finalRating).withOpacity(0.5),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                          spreadRadius: 2,
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      getRatingDescription(finalRating),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        shadows: [
+                          Shadow(
+                            offset: Offset(0, 2),
+                            blurRadius: 4,
+                            color: Colors.black26,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.grey[300]!,
+                          Colors.grey[200]!,
+                          Colors.grey[300]!,
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      '($finalRating/3)',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey[800],
+                        fontWeight: FontWeight.w600,
+                        shadows: [
+                          Shadow(
+                            offset: const Offset(0, 1),
+                            blurRadius: 2,
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
 
-          if (finalRating >= 2) const SizedBox(height: 12),
+            const SizedBox(height: 8),
 
-          // Rating section
-          Row(
-            children: [
-              const Text(
-                'Rating: ',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            // Details
+            _buildDetailRow('Type:', finalDamageType),
+            _buildDetailRow('Severity:', finalSeverity),
+            _buildDetailRow('Location/\nSide:', finalLocation),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Last updated: ${DateTime.now().month}/${DateTime.now().day}/${DateTime.now().year}',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[500],
+                fontStyle: FontStyle.italic,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: getRatingColor(finalRating),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  getRatingDescription(finalRating),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '($finalRating/3)',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          // Details
-          _buildDetailRow('Type:', finalDamageType),
-          _buildDetailRow('Severity:', finalSeverity),
-          _buildDetailRow('Location/\nSide:', finalLocation),
-
-          const SizedBox(height: 8),
-
-          const Text(
-            'Description:',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            finalDamageDescription,
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            'Last updated: ${DateTime.now().month}/${DateTime.now().day}/${DateTime.now().year}',
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[500],
-              fontStyle: FontStyle.italic,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -863,11 +1986,48 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
                       _getVanSideIcon('FRONT'),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'FRONT',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.grey[100]!,
+                            Colors.white,
+                            Colors.grey[100]!,
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.grey[300]!,
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        'FRONT',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey[900],
+                          letterSpacing: 0.8,
+                          shadows: [
+                            Shadow(
+                              offset: const Offset(0, 1),
+                              blurRadius: 2,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -881,11 +2041,55 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
                       _getVanSideIcon('DRIVER'),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'DRIVER',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.grey[200]!,
+                            Colors.white,
+                            Colors.grey[200]!,
+                            Colors.white,
+                          ],
+                          stops: const [0.0, 0.3, 0.7, 1.0],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          ),
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.05),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                            spreadRadius: 1,
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.grey[400]!,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        'DRIVER',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey[900],
+                          letterSpacing: 1.0,
+                          shadows: [
+                            Shadow(
+                              offset: const Offset(0, 2),
+                              blurRadius: 4,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -899,11 +2103,55 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
                       _getVanSideIcon('PASSENGER'),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'PASSENGER',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.grey[200]!,
+                            Colors.white,
+                            Colors.grey[200]!,
+                            Colors.white,
+                          ],
+                          stops: const [0.0, 0.3, 0.7, 1.0],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          ),
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.05),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                            spreadRadius: 1,
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.grey[400]!,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        'PASSENGER',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey[900],
+                          letterSpacing: 1.0,
+                          shadows: [
+                            Shadow(
+                              offset: const Offset(0, 2),
+                              blurRadius: 4,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -917,11 +2165,55 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
                       _getVanSideIcon('REAR'),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'REAR',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.grey[200]!,
+                            Colors.white,
+                            Colors.grey[200]!,
+                            Colors.white,
+                          ],
+                          stops: const [0.0, 0.3, 0.7, 1.0],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          ),
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.05),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                            spreadRadius: 1,
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.grey[400]!,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        'REAR',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey[900],
+                          letterSpacing: 1.0,
+                          shadows: [
+                            Shadow(
+                              offset: const Offset(0, 2),
+                              blurRadius: 4,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -1592,59 +2884,221 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
   }
 
   Widget _buildLegendItem(String label, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            Colors.grey[50]!,
+            Colors.white,
+            Colors.grey[50]!,
+          ],
+          stops: const [0.0, 0.3, 0.7, 1.0],
         ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+            spreadRadius: 1,
+          ),
+        ],
+        border: Border.all(
+          color: Colors.grey[200]!,
+          width: 1.5,
         ),
-      ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment.center,
+                radius: 0.8,
+                colors: [
+                  color,
+                  color.withOpacity(0.8),
+                  color,
+                  color.withOpacity(0.9),
+                ],
+                stops: const [0.0, 0.4, 0.7, 1.0],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.5),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                  spreadRadius: 1,
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[900],
+              letterSpacing: 0.3,
+              shadows: [
+                Shadow(
+                  offset: const Offset(0, 2),
+                  blurRadius: 4,
+                  color: Colors.white.withOpacity(0.9),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            Colors.grey[50]!,
+            Colors.white,
+            Colors.grey[50]!,
+          ],
+          stops: const [0.0, 0.3, 0.7, 1.0],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+            spreadRadius: 1,
+          ),
+        ],
+        border: Border.all(
+          color: Colors.grey[200]!,
+          width: 1.5,
+        ),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 70,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.blue[600]!,
+                  Colors.blue[500]!,
+                  Colors.blue[600]!,
+                  Colors.blue[500]!,
+                ],
+                stops: const [0.0, 0.3, 0.7, 1.0],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.4),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                height: 1.4,
+                letterSpacing: 0.3,
+                shadows: [
+                  Shadow(
+                    offset: const Offset(0, 1),
+                    blurRadius: 2,
+                    color: Colors.black.withOpacity(0.3),
+                  ),
+                ],
               ),
             ),
           ),
+          const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              value
-                  .replaceAll('_', ' ')
-                  .toLowerCase()
-                  .split(' ')
-                  .map((word) => word.isNotEmpty
-                      ? word[0].toUpperCase() + word.substring(1)
-                      : '')
-                  .join(' '),
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.black54,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.grey[100]!,
+                    Colors.white,
+                    Colors.grey[100]!,
+                    Colors.white,
+                  ],
+                  stops: const [0.0, 0.3, 0.7, 1.0],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+                border: Border.all(
+                  color: Colors.grey[300]!,
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                  height: 1.4,
+                  letterSpacing: 0.2,
+                  shadows: [
+                    Shadow(
+                      offset: const Offset(0, 1),
+                      blurRadius: 2,
+                      color: Colors.white.withOpacity(0.8),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1678,9 +3132,11 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
       }
     }
 
-    return Card(
+    return ModernPremiumCard(
+      enableGlass: true,
+      enableNeonEffect: true,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1732,7 +3188,9 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
     final images = vanData!['images'] as List? ?? [];
 
     if (images.isEmpty) {
-      return Card(
+      return ModernPremiumCard(
+        enableGlass: true,
+        enableNeonEffect: true,
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Center(
@@ -1822,8 +3280,9 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
         'Unknown Driver';
     final imageCount = images.length;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+    return ModernPremiumCard(
+      enableGlass: true,
+      enableNeonEffect: true,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1861,11 +3320,18 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
                 ),
                 const SizedBox(width: 8),
                 if (driverId != 'unknown')
-                  IconButton(
-                    icon: const Icon(Icons.arrow_forward),
+                  ElevatedButton.icon(
                     onPressed: () =>
                         _navigateToDriverProfile(driverId, driverName),
-                    tooltip: 'View driver profile',
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: const Text('VIEW'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
                   ),
               ],
             ),
@@ -1899,7 +3365,8 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
                           flex: 1,
                           child: SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton(
+                            child: ModernPremiumButton(
+                              text: 'VIEW',
                               onPressed: () {
                                 debugPrint(
                                     '🚀 VIEW BUTTON: Pressed for image ${image['id']}');
@@ -1925,25 +3392,6 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
                                   ),
                                 );
                               },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue[600],
-                                foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 4),
-                                textStyle: const TextStyle(
-                                    fontSize: 10, fontWeight: FontWeight.bold),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.fullscreen, size: 12),
-                                  const SizedBox(width: 2),
-                                  const Text('VIEW'),
-                                ],
-                              ),
                             ),
                           ),
                         ),
@@ -2300,8 +3748,8 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
 
         final bytes = base64Decode(base64Data);
 
-        return ElevatedButton(
-          onPressed: () {
+        return GestureDetector(
+          onTap: () {
             debugPrint('🚀 SIMPLE: Button pressed! Opening image viewer...');
             final images = vanData!['images'] as List? ?? [];
             final imageList = images.cast<Map<String, dynamic>>();
@@ -2315,11 +3763,6 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
               ),
             );
           },
-          style: ElevatedButton.styleFrom(
-            padding: EdgeInsets.zero,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
           child: Container(
             width: 100,
             height: 100,
@@ -2470,4 +3913,436 @@ class _VanProfileScreenState extends State<VanProfileScreen> {
       ),
     );
   }
+
+  Widget _buildDamageStatistics(List images) {
+    // Calculate damage statistics
+    int totalImages = images.length;
+    int noDamage = 0;
+    int minorDamage = 0;
+    int moderateDamage = 0;
+    int majorDamage = 0;
+
+    for (final image in images) {
+      final damageLevel = image['van_rating'] as int? ?? 0;
+      switch (damageLevel) {
+        case 0:
+          noDamage++;
+          break;
+        case 1:
+          minorDamage++;
+          break;
+        case 2:
+          moderateDamage++;
+          break;
+        case 3:
+          majorDamage++;
+          break;
+      }
+    }
+
+    return ModernPremiumCard(
+      enableGlass: true,
+      enableNeonEffect: true,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.analytics, color: Colors.grey[600], size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Damage Statistics',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildDamageLevelBar(
+                'No Damage (L0)', noDamage, totalImages, Colors.green[600]!),
+            const SizedBox(height: 8),
+            _buildDamageLevelBar(
+                'Minor (L1)', minorDamage, totalImages, Colors.yellow[700]!),
+            const SizedBox(height: 8),
+            _buildDamageLevelBar('Moderate (L2)', moderateDamage, totalImages,
+                Colors.orange[700]!),
+            const SizedBox(height: 8),
+            _buildDamageLevelBar(
+                'Major (L3)', majorDamage, totalImages, Colors.red[700]!),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDamageLevelBar(String label, int count, int total, Color color) {
+    final percentage = total > 0 ? (count / total) : 0.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 12,
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Container(
+          height: 6,
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: percentage,
+            child: Container(
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Dialog methods for damage alerts
+  void _showDamageDetailsDialog(BuildContext context, int rating,
+      String description, String type, String location) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: _getDamageLevelColor(rating),
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Damage Details',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _getDamageLevelColor(rating),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow(
+                  'Level:', 'L$rating - ${_getDamageLevelDescription(rating)}'),
+              _buildDetailRow('Type:', type),
+              _buildDetailRow('Location:', location),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _getDamageLevelColor(rating).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _getDamageLevelColor(rating).withOpacity(0.3),
+                  ),
+                ),
+                child: Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[800],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showDamageReportDialog(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _getDamageLevelColor(rating),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Report New Damage'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDamageReportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.add_circle_outline,
+                color: Colors.blue[600],
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Report New Damage',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'This feature will allow you to report new damage to the van. The form will include:',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              _buildFeatureItem('Damage type selection'),
+              _buildFeatureItem('Location on van'),
+              _buildFeatureItem('Severity level'),
+              _buildFeatureItem('Photo upload'),
+              _buildFeatureItem('Description field'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Damage report form coming soon!'),
+                    backgroundColor: Colors.blue,
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[600],
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Continue'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFeatureItem(String feature) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            Icons.check_circle,
+            color: Colors.green[600],
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            feature,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getDamageLevelDescription(int level) {
+    switch (level) {
+      case 0:
+        return 'No Damage';
+      case 1:
+        return 'Minor';
+      case 2:
+        return 'Moderate';
+      case 3:
+        return 'Major';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  Color _getDamageLevelColor(int level) {
+    switch (level) {
+      case 0:
+        return Colors.green[600]!;
+      case 1:
+        return Colors.yellow[700]!;
+      case 2:
+        return Colors.orange[700]!;
+      case 3:
+        return Colors.red[700]!;
+      default:
+        return Colors.grey[600]!;
+    }
+  }
+}
+
+// Premium Custom Painters for the backdrop
+class GeometricPatternPainter extends CustomPainter {
+  final Animation<double> animation;
+  final Animation<double> particleAnimation;
+
+  GeometricPatternPainter({
+    required this.animation,
+    required this.particleAnimation,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = ModernPremiumTheme.primaryNeon.withOpacity(0.1)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) * 0.3;
+
+    // Draw geometric patterns
+    for (int i = 0; i < 8; i++) {
+      final angle = (i * math.pi / 4) + animation.value * math.pi * 2;
+      final x = center.dx + math.cos(angle) * radius;
+      final y = center.dy + math.sin(angle) * radius;
+
+      canvas.drawCircle(
+        Offset(x, y),
+        20 + 10 * math.sin(particleAnimation.value * math.pi * 2 + i),
+        paint,
+      );
+    }
+
+    // Draw connecting lines
+    for (int i = 0; i < 8; i++) {
+      final angle1 = (i * math.pi / 4) + animation.value * math.pi * 2;
+      final angle2 = ((i + 2) * math.pi / 4) + animation.value * math.pi * 2;
+
+      final x1 = center.dx + math.cos(angle1) * radius;
+      final y1 = center.dy + math.sin(angle1) * radius;
+      final x2 = center.dx + math.cos(angle2) * radius;
+      final y2 = center.dy + math.sin(angle2) * radius;
+
+      canvas.drawLine(Offset(x1, y1), Offset(x2, y2), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class NoiseTexturePainter extends CustomPainter {
+  final Animation<double> animation;
+
+  NoiseTexturePainter({required this.animation});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = ModernPremiumTheme.textDiamond.withOpacity(0.1)
+      ..strokeWidth = 0.5;
+
+    final random = math.Random(42); // Fixed seed for consistent pattern
+
+    for (int i = 0; i < 1000; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      final opacity = random.nextDouble() * 0.3;
+
+      paint.color = ModernPremiumTheme.textDiamond.withOpacity(opacity);
+      canvas.drawCircle(Offset(x, y), 0.5, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class LightRaysPainter extends CustomPainter {
+  final Animation<double> animation;
+  final Animation<double> breathingAnimation;
+
+  LightRaysPainter({
+    required this.animation,
+    required this.breathingAnimation,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          ModernPremiumTheme.primaryNeon
+              .withOpacity(0.05 * breathingAnimation.value),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) * 0.8;
+
+    // Draw light rays
+    for (int i = 0; i < 12; i++) {
+      final angle = (i * math.pi / 6) + animation.value * math.pi * 2;
+      final x = center.dx + math.cos(angle) * radius;
+      final y = center.dy + math.sin(angle) * radius;
+
+      final path = Path()
+        ..moveTo(center.dx, center.dy)
+        ..lineTo(x, y);
+
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

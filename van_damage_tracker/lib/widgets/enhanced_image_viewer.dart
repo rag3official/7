@@ -34,6 +34,12 @@ class _EnhancedImageViewerState extends State<EnhancedImageViewer>
   bool _isLoading = false;
   double _currentScale = 1.0;
 
+  // Advanced features
+  bool _showGrid = false;
+  bool _showFilters = false;
+  bool _autoPlay = false;
+  String _selectedFilter = 'all';
+
   // Magnifying glass functionality
   bool _showMagnifier = false;
   Offset _magnifierPosition = Offset.zero;
@@ -103,6 +109,35 @@ class _EnhancedImageViewerState extends State<EnhancedImageViewer>
     if (!_showControls && _showImageDetails) {
       _toggleImageDetails();
     }
+  }
+
+  // Advanced feature methods
+  void _toggleGrid() {
+    setState(() {
+      _showGrid = !_showGrid;
+    });
+    HapticFeedback.lightImpact();
+  }
+
+  void _toggleFilters() {
+    setState(() {
+      _showFilters = !_showFilters;
+    });
+    HapticFeedback.lightImpact();
+  }
+
+  void _toggleAutoPlay() {
+    setState(() {
+      _autoPlay = !_autoPlay;
+    });
+    HapticFeedback.lightImpact();
+  }
+
+  void _setFilter(String filter) {
+    setState(() {
+      _selectedFilter = filter;
+    });
+    HapticFeedback.selectionClick();
   }
 
   void _toggleImageDetails() {
@@ -339,6 +374,8 @@ class _EnhancedImageViewerState extends State<EnhancedImageViewer>
                   ),
                 ),
               ),
+              // Grid overlay
+              if (_showGrid) _buildGridOverlay(),
               // Magnifying glass overlay
               if (_showMagnifier) _buildMagnifyingGlass(bytes),
             ],
@@ -515,6 +552,15 @@ class _EnhancedImageViewerState extends State<EnhancedImageViewer>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildGridOverlay() {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: GridPainter(),
+        child: Container(),
       ),
     );
   }
@@ -773,6 +819,56 @@ class _EnhancedImageViewerState extends State<EnhancedImageViewer>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Advanced feature toggles
+          IconButton(
+            onPressed: _toggleGrid,
+            icon: Icon(
+              _showGrid ? Icons.grid_on : Icons.grid_off,
+              color: _showGrid ? Colors.orange : Colors.white,
+            ),
+            style: IconButton.styleFrom(
+              backgroundColor: _showGrid
+                  ? Colors.orange.withOpacity(0.3)
+                  : Colors.white.withOpacity(0.1),
+            ),
+            tooltip: _showGrid ? 'Hide Grid' : 'Show Grid',
+          ),
+          const SizedBox(height: 4),
+          IconButton(
+            onPressed: _toggleFilters,
+            icon: Icon(
+              _showFilters ? Icons.filter_list : Icons.filter_list_outlined,
+              color: _showFilters ? Colors.purple : Colors.white,
+            ),
+            style: IconButton.styleFrom(
+              backgroundColor: _showFilters
+                  ? Colors.purple.withOpacity(0.3)
+                  : Colors.white.withOpacity(0.1),
+            ),
+            tooltip: _showFilters ? 'Hide Filters' : 'Show Filters',
+          ),
+          const SizedBox(height: 4),
+          IconButton(
+            onPressed: _toggleAutoPlay,
+            icon: Icon(
+              _autoPlay ? Icons.pause : Icons.play_arrow,
+              color: _autoPlay ? Colors.red : Colors.white,
+            ),
+            style: IconButton.styleFrom(
+              backgroundColor: _autoPlay
+                  ? Colors.red.withOpacity(0.3)
+                  : Colors.white.withOpacity(0.1),
+            ),
+            tooltip: _autoPlay ? 'Stop Auto-Play' : 'Start Auto-Play',
+          ),
+          const SizedBox(height: 8),
+          // Divider
+          Container(
+            width: 20,
+            height: 1,
+            color: Colors.white.withOpacity(0.3),
+          ),
+          const SizedBox(height: 8),
           // Magnifying glass toggle
           IconButton(
             onPressed: _toggleMagnifier,
@@ -1389,4 +1485,29 @@ class _EnhancedImageViewerState extends State<EnhancedImageViewer>
       ),
     );
   }
+}
+
+class GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.3)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    const gridSize = 50.0;
+
+    // Draw vertical lines
+    for (double x = 0; x <= size.width; x += gridSize) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+
+    // Draw horizontal lines
+    for (double y = 0; y <= size.height; y += gridSize) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

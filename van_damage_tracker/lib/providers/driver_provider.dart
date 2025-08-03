@@ -66,9 +66,16 @@ class DriverProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      print('🔄 DriverProvider: Starting driver refresh...');
+
+      // Clear cache before fetching fresh data
+      _driverService.clearCache();
+
       _drivers = await _driverService.getDrivers();
+      print('📊 DriverProvider: Loaded ${_drivers.length} drivers');
       _error = null;
     } catch (e) {
+      print('❌ DriverProvider: Error loading drivers: $e');
       _error = 'Failed to load drivers: $e';
       debugPrint(_error);
     } finally {
@@ -90,6 +97,8 @@ class DriverProvider extends ChangeNotifier {
   Future<void> createDriver(DriverProfile driver) async {
     try {
       await _driverService.createDriver(driver);
+      // Clear cache to ensure fresh data
+      _driverService.clearCache();
       await refreshDrivers();
     } catch (e) {
       _error = 'Failed to add driver: $e';
@@ -101,6 +110,8 @@ class DriverProvider extends ChangeNotifier {
   Future<void> updateDriver(DriverProfile driver) async {
     try {
       await _driverService.updateDriver(driver.id, driver.toJson());
+      // Clear cache to ensure fresh data
+      _driverService.clearCache();
       await refreshDrivers();
     } catch (e) {
       _error = 'Failed to update driver: $e';
@@ -112,6 +123,8 @@ class DriverProvider extends ChangeNotifier {
   Future<void> deleteDriver(String id) async {
     try {
       await _driverService.deleteDriver(id);
+      // Clear cache to ensure fresh data
+      _driverService.clearCache();
       await refreshDrivers();
     } catch (e) {
       _error = 'Failed to delete driver: $e';
@@ -136,6 +149,35 @@ class DriverProvider extends ChangeNotifier {
     final statuses = _drivers.map((driver) => driver.status).toSet().toList();
     statuses.sort();
     return statuses;
+  }
+
+  // Background loading method for pre-loading data
+  Future<void> loadDriversInBackground() async {
+    try {
+      print('👥 DriverProvider: Starting background driver loading...');
+
+      // Load drivers without notifying listeners to avoid UI updates
+      final backgroundDrivers = await _driverService.getDrivers();
+
+      // Only update the internal list if we got data
+      if (backgroundDrivers.isNotEmpty) {
+        _drivers = backgroundDrivers;
+        print(
+            '👥 DriverProvider: Background loading completed - ${_drivers.length} drivers loaded');
+      } else {
+        print(
+            '👥 DriverProvider: Background loading completed - no drivers found');
+      }
+    } catch (e) {
+      print('❌ DriverProvider: Background loading error: $e');
+      // Don't set error state for background loading
+    }
+  }
+
+  // Clear cache method for refresh functionality
+  void clearCache() {
+    _driverService.clearCache();
+    print('🗑️ DriverProvider: Cache cleared');
   }
 
   @override

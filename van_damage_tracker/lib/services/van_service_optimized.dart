@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/van.dart';
@@ -8,284 +7,350 @@ import '../models/driver.dart';
 
 class VanServiceOptimized {
   final SupabaseClient _supabase = Supabase.instance.client;
+  List<Van>? _cachedVans;
+  DateTime? _lastCacheTime;
+  static const Duration _cacheValidDuration = Duration(minutes: 5);
 
-  // Helper method to normalize status from database format to display format
-  String _normalizeStatus(String? status) {
-    if (status == null) return 'Active';
-
-    switch (status.toLowerCase()) {
-      case 'active':
-        return 'Active';
-      case 'maintenance':
-        return 'Maintenance';
-      case 'out_of_service':
-        return 'Out of Service';
-      default:
-        return status; // Return as-is for unknown statuses
-    }
-  }
-
-  // Get all vans with timeout and fallback handling
+  // Primary method using original approach with optimizations
   Future<List<Van>> getAllVans() async {
     try {
-      print('🔍 Attempting optimized van fetch...');
-
-      // Use timeout to prevent hanging - removed 'notes' column that doesn't exist
-      final response = await _supabase
-          .from('van_profiles')
-          .select(
-              'id, van_number, make, model, status, created_at, alerts, damage_caused_by')
-          .order('van_number', ascending: true)
-          .limit(20)
-          .timeout(const Duration(seconds: 8));
-
-      print('✅ Fetched ${response.length} vans successfully');
-
-      // Get driver information for each van
-      List<Van> vans = [];
-      int alertCount = 0;
-      for (final item in response) {
-        String vanId = item['id']?.toString() ?? '';
-        String vanNumber = item['van_number']?.toString() ?? 'Unknown';
-
-        // Try to get the most recent driver from van_images
-        String driverName = 'Not assigned';
-        String damage = 'No damage reported';
-        String damageDescription = 'No damage reported';
-        String rating = '0';
-
-        try {
-          // Get the most recent image for this van to extract driver info
-          final imageResponse = await _supabase
-              .from('van_images')
-              .select('uploaded_by, van_damage, van_rating, driver_name')
-              .eq('van_id', vanId)
-              .order('created_at', ascending: false)
-              .limit(1)
-              .timeout(const Duration(seconds: 3));
-
-          if (imageResponse.isNotEmpty) {
-            final imageData = imageResponse.first;
-            driverName = imageData['driver_name']?.toString() ??
-                imageData['uploaded_by']?.toString() ??
-                'Not assigned';
-            damage =
-                imageData['van_damage']?.toString() ?? 'No damage reported';
-            rating = imageData['van_rating']?.toString() ?? '0';
-            damageDescription = damage;
-            print('✅ Found driver for van $vanNumber: $driverName');
-          }
-        } catch (e) {
-          print('⚠️ Could not fetch driver info for van $vanNumber: $e');
-          // Continue with default values
+      // Check cache first
+      if (_cachedVans != null && _lastCacheTime != null) {
+        final timeSinceCache = DateTime.now().difference(_lastCacheTime!);
+        if (timeSinceCache < _cacheValidDuration) {
+          print('📦 Returning cached vans (${_cachedVans!.length} vans)');
+          return _cachedVans!;
         }
-
-        final alertsValue = item['alerts']?.toString() ?? 'no';
-        print('🚨 Van #$vanNumber alerts value: $alertsValue');
-        if (alertsValue == 'yes') {
-          alertCount++;
-        }
-
-        final van = Van(
-          id: vanId,
-          plateNumber: vanNumber,
-          model: item['make']?.toString() ?? 'Unknown',
-          year: item['model']?.toString() ?? 'Unknown',
-          status: _normalizeStatus(item['status']?.toString()),
-          alerts: alertsValue, // Alert flag for damage level 2/3
-          damageCausedBy: item['damage_caused_by']?.toString(),
-          lastInspection:
-              DateTime.tryParse(item['created_at']?.toString() ?? '') ??
-                  DateTime.now(),
-          notes: 'No notes available', // Default value since column not queried
-          url: '',
-          driverName: driverName,
-          damage: damage,
-          damageDescription: damageDescription,
-          rating: rating,
-          images: [],
-          maintenanceHistory: [],
-        );
-
-        vans.add(van);
       }
 
-      print('🚨 Total vans with alerts: $alertCount out of ${vans.length}');
-      return vans;
+      print('🚀 Fetching vans using optimized original method...');
+      print('🌐 Running on: ${kIsWeb ? 'web' : Platform.operatingSystem}');
+
+      // Use the original method with optimizations and timeout
+      return await _getVansWithOptimizedOriginalMethod().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          print('⏰ Van loading timed out, returning empty list');
+          return <Van>[];
+        },
+      );
     } catch (e) {
-      print('❌ Optimized query failed: $e');
-      print('🔄 Using mock van data as fallback');
+      print('❌ Error fetching vans: $e');
+      print('🔧 Error type: ${e.runtimeType}');
 
-      // Return mock data as fallback
-      return _getMockVans();
-    }
-  }
+      // Return cached data if available and error is network-related
+      if (_cachedVans != null &&
+          (e.toString().contains('timeout') ||
+              e.toString().contains('57014') ||
+              e.toString().contains('canceling statement') ||
+              e.toString().contains('network'))) {
+        print('⏱️ Network error detected - returning cached data');
+        return _cachedVans!;
+      }
 
-  // Get van images separately to avoid complex joins
-  Future<List<VanImage>> getVanImages(String vanId) async {
-    try {
-      print('🖼️ Fetching images for van $vanId...');
+      // Check if this is a network/permission error on macOS
+      if (!kIsWeb &&
+          Platform.isMacOS &&
+          e.toString().contains('Operation not permitted')) {
+        print('🚫 macOS network blocked - try running in Chrome instead');
+        print('💡 Run: flutter run -d chrome');
+        return _getMockVans();
+      }
 
-      final response = await _supabase
-          .from('van_images')
-          .select('*')
-          .eq('van_id', vanId)
-          .order('created_at', ascending: false)
-          .limit(10)
-          .timeout(const Duration(seconds: 5));
+      // If all else fails, return cached data or empty list
+      if (_cachedVans != null) {
+        print('🔄 Returning cached data due to error');
+        return _cachedVans!;
+      }
 
-      print('✅ Found ${response.length} images for van $vanId');
-
-      return response.map<VanImage>((item) {
-        String imageUrl = '';
-
-        // Handle base64 data
-        if (item['image_data'] != null &&
-            item['image_data'].toString().isNotEmpty) {
-          if (item['image_data'].toString().startsWith('data:')) {
-            imageUrl = item['image_data'].toString();
-          } else {
-            imageUrl =
-                'data:${item['content_type'] ?? 'image/jpeg'};base64,${item['image_data']}';
-          }
-        } else if (item['image_url'] != null) {
-          imageUrl = item['image_url'].toString();
-        }
-
-        return VanImage(
-          id: item['id']?.toString() ?? '',
-          vanId: vanId,
-          imageUrl: imageUrl,
-          driverId: item['driver_id']?.toString(),
-          damageType: item['van_damage']?.toString() ?? 'Unknown',
-          damageLevel: int.tryParse(item['van_rating']?.toString() ?? '0') ?? 0,
-          location:
-              item['location']?.toString() ?? item['van_side']?.toString(),
-          vanSide: item['van_side']?.toString(),
-          uploadedAt: DateTime.tryParse(item['created_at']?.toString() ?? '') ??
-              DateTime.now(),
-          createdAt: DateTime.tryParse(item['created_at']?.toString() ?? '') ??
-              DateTime.now(),
-          updatedAt: DateTime.tryParse(item['created_at']?.toString() ?? '') ??
-              DateTime.now(),
-          description: item['van_damage']?.toString() ?? '',
-          uploadedBy: item['uploaded_by']?.toString() ?? 'Unknown',
-          driverName: item['driver_name']?.toString() ??
-              item['uploaded_by']?.toString() ??
-              'Unknown',
-        );
-      }).toList();
-    } catch (e) {
-      print('❌ Error fetching van images: $e');
+      print('⚠️ No cached data available, returning empty list');
       return [];
     }
   }
 
-  // Get drivers separately
-  Future<List<Driver>> getAllDrivers() async {
+  // Optimized original method with batch loading
+  Future<List<Van>> _getVansWithOptimizedOriginalMethod() async {
     try {
-      print('👥 Fetching drivers...');
+      print('🔄 Using optimized original method...');
 
-      final response = await _supabase
-          .from('driver_profiles')
-          .select('*')
-          .eq('status', 'active')
-          .order('driver_name', ascending: true)
-          .limit(50)
+      // Step 1: Get all van profiles in one query with only essential columns
+      print('🔍 Querying van_profiles table...');
+      final vanProfilesResponse =
+          await _supabase.from('van_profiles').select('''
+            id,
+            van_number,
+            make,
+            model,
+            year,
+            status,
+            notes,
+            created_at,
+            updated_at
+          ''').order('created_at', ascending: false).limit(50).timeout(
+                const Duration(seconds: 8),
+                onTimeout: () {
+                  print('⏰ Van profiles query timed out');
+                  return <Map<String, dynamic>>[];
+                },
+              );
+
+      print(
+          '✅ Fetched ${vanProfilesResponse.length} van profiles from database');
+
+      if (vanProfilesResponse.isNotEmpty) {
+        print('📝 First van data: ${vanProfilesResponse.first}');
+      }
+
+      if (vanProfilesResponse.isEmpty) {
+        print('⚠️ No van profiles found in database - this might be the issue');
+        print('🔍 Checking if van_profiles table exists and has data...');
+
+        // Try a simple query to see if the table exists
+        try {
+          final testResponse =
+              await _supabase.from('van_profiles').select('count').limit(1);
+          print('✅ van_profiles table exists and is accessible');
+        } catch (e) {
+          print('❌ Error accessing van_profiles table: $e');
+          return _getMockVans();
+        }
+
+        // If table exists but is empty, return empty list instead of mock data
+        print('📝 van_profiles table is empty - returning empty list');
+        return [];
+      }
+
+      // Step 2: Get all van numbers for batch image query
+      final vanNumbers = vanProfilesResponse
+          .map((profile) => profile['van_number']?.toString() ?? '')
+          .where((number) => number.isNotEmpty)
+          .toList();
+
+      print(
+          '🔍 Found ${vanNumbers.length} van numbers: ${vanNumbers.join(', ')}');
+
+      // Step 3: Batch load all images for all vans in one query
+      List<Map<String, dynamic>> allImagesResponse = [];
+      if (vanNumbers.isNotEmpty) {
+        try {
+          print(
+              '🔍 Querying van_images table for ${vanNumbers.length} vans...');
+          allImagesResponse = await _supabase
+              .from('van_images')
+              .select('''
+                id,
+                van_number,
+                image_url,
+                image_data,
+                van_damage,
+                van_rating,
+                van_side,
+                damage_type,
+                damage_severity,
+                damage_location,
+                created_at,
+                uploaded_by
+              ''')
+              .inFilter('van_number', vanNumbers)
+              .order('created_at', ascending: false)
+              .limit(200)
+              .timeout(
+                const Duration(seconds: 8),
+                onTimeout: () {
+                  print('⏰ Van images query timed out');
+                  return <Map<String, dynamic>>[];
+                },
+              );
+
+          print(
+              '📷 Batch loaded ${allImagesResponse.length} images for all vans');
+        } catch (e) {
+          print('⚠️ Could not batch load images: $e');
+          allImagesResponse = [];
+        }
+      }
+
+      // Step 4: Group images by van number for efficient lookup
+      final Map<String, List<VanImage>> imagesByVanNumber = {};
+      for (final imageData in allImagesResponse) {
+        final vanNumber = imageData['van_number']?.toString() ?? '';
+        if (vanNumber.isNotEmpty) {
+          try {
+            final vanImage = VanImage.fromJson(imageData);
+            imagesByVanNumber.putIfAbsent(vanNumber, () => []).add(vanImage);
+          } catch (e) {
+            print('⚠️ Error processing image for van $vanNumber: $e');
+          }
+        }
+      }
+
+      // Step 5: Create van objects with optimized damage calculation
+      List<Van> vans = [];
+      for (final vanProfile in vanProfilesResponse) {
+        try {
+          final vanNumber = vanProfile['van_number']?.toString() ?? '';
+          final vanImages = imagesByVanNumber[vanNumber] ?? [];
+
+          // Optimized damage calculation
+          String aggregatedDamageDescription = 'No damage reported';
+          int maxDamageRating = 0;
+
+          if (vanImages.isNotEmpty) {
+            // Find the highest damage rating
+            maxDamageRating = vanImages
+                .map((img) => img.damageLevel ?? 0)
+                .reduce((a, b) => a > b ? a : b);
+
+            // Get the most recent damage description
+            final latestImage = vanImages
+                .reduce((a, b) => a.uploadedAt.isAfter(b.uploadedAt) ? a : b);
+
+            if (latestImage.vanDamage != null &&
+                latestImage.vanDamage!.isNotEmpty) {
+              aggregatedDamageDescription = latestImage.vanDamage!;
+            } else if (maxDamageRating > 0) {
+              // Create generic damage description based on rating
+              switch (maxDamageRating) {
+                case 1:
+                  aggregatedDamageDescription = 'Minor damage detected';
+                  break;
+                case 2:
+                  aggregatedDamageDescription = 'Moderate damage detected';
+                  break;
+                case 3:
+                  aggregatedDamageDescription = 'Major damage detected';
+                  break;
+              }
+            }
+          }
+
+          final van = Van(
+            id: vanProfile['id']?.toString() ?? '',
+            plateNumber: vanNumber,
+            model: vanProfile['model']?.toString() ??
+                vanProfile['make']?.toString() ??
+                'Unknown',
+            year: vanProfile['year']?.toString() ??
+                vanProfile['model']?.toString() ??
+                'Unknown',
+            status: vanProfile['status']?.toString() ?? 'active',
+            lastInspection:
+                DateTime.tryParse(vanProfile['created_at']?.toString() ?? '') ??
+                    DateTime.now(),
+            notes: vanProfile['notes']?.toString() ?? '',
+            url: '',
+            driverName: '', // No driver name column in your table
+            damage: aggregatedDamageDescription,
+            damageDescription: aggregatedDamageDescription,
+            rating: maxDamageRating.toString(),
+            images: vanImages,
+            maintenanceHistory: [],
+          );
+
+          vans.add(van);
+          print('✅ Processed van: ${van.plateNumber} (${van.model})');
+        } catch (e) {
+          print('❌ Error processing van profile: $e');
+        }
+      }
+
+      // Cache the results
+      _cachedVans = vans;
+      _lastCacheTime = DateTime.now();
+
+      print(
+          '✅ Successfully processed ${vans.length} vans with optimized original method');
+      print('📊 Cache updated with ${vans.length} vans');
+      print('⚡ Performance: Batch loading instead of N+1 queries');
+
+      return vans;
+    } catch (e) {
+      print('❌ Optimized original method failed: $e');
+      print('🔧 Error type: ${e.runtimeType}');
+      print('🔧 Error details: ${e.toString()}');
+      return _getMockVans();
+    }
+  }
+
+  // Clear cache when data is updated
+  void clearCache() {
+    _cachedVans = null;
+    _lastCacheTime = null;
+    print('🗑️ Van cache cleared');
+  }
+
+  // Ultra fast loading method for initial app launch
+  Future<List<Van>> getVansFast() async {
+    try {
+      print('⚡ Ultra fast loading vans...');
+
+      // Minimal query with timeout
+      final vanProfilesResponse = await _supabase
+          .from('van_profiles')
+          .select('van_number, status')
+          .limit(10)
           .timeout(const Duration(seconds: 5));
 
-      print('✅ Found ${response.length} drivers');
-      return response.map<Driver>((json) => Driver.fromJson(json)).toList();
+      if (vanProfilesResponse.isEmpty) {
+        print('⚠️ No van profiles found in ultra fast query');
+        return [];
+      }
+
+      final vans = <Van>[];
+      for (final vanProfile in vanProfilesResponse) {
+        try {
+          final vanNumber = vanProfile['van_number']?.toString() ?? '';
+          if (vanNumber.isEmpty) continue;
+
+          final van = Van(
+            id: vanNumber,
+            plateNumber: vanNumber,
+            model: 'Van',
+            year: '2024',
+            status: vanProfile['status']?.toString() ?? 'active',
+            lastInspection: DateTime.now(),
+            notes: '',
+            url: '',
+            driverName: '',
+            damage: 'No damage reported',
+            damageDescription: 'No damage reported',
+            rating: '0',
+            images: [],
+            maintenanceHistory: [],
+          );
+
+          vans.add(van);
+        } catch (e) {
+          print('❌ Error processing van in ultra fast query: $e');
+        }
+      }
+
+      print('⚡ Ultra fast loading completed: ${vans.length} vans');
+      return vans;
     } catch (e) {
-      print('❌ Error fetching drivers: $e');
-      return _getMockDrivers();
+      print('❌ Error in ultra fast loading: $e');
+      return [];
     }
   }
 
-  // Delete a van
-  Future<bool> deleteVan(String vanId) async {
-    try {
-      await _supabase.from('van_profiles').delete().eq('id', vanId);
-      return true;
-    } catch (e) {
-      print('❌ Error deleting van: $e');
-      return false;
-    }
-  }
-
-  // Mock data for fallback
+  // Mock data for testing
   List<Van> _getMockVans() {
-    print('🔄 Using mock van data as fallback');
     return [
       Van(
-        id: 'mock-1',
-        plateNumber: '92',
+        id: '1',
+        plateNumber: 'VAN001',
         model: 'Ford Transit',
-        status: 'Active',
         year: '2022',
-        mileage: 15000,
-        lastInspection: DateTime.now().subtract(const Duration(days: 30)),
-        driverName: 'John Smith',
-        rating: '2',
-        damage: 'Minor scratch',
-        damageDescription: 'Small scratch on left door',
-        notes: 'Regular maintenance due next month',
-        url:
-            'https://images.unsplash.com/photo-1570993492881-25240ce854f4?w=800',
-      ),
-      Van(
-        id: 'mock-2',
-        plateNumber: '88',
-        model: 'Mercedes Sprinter',
-        status: 'Active',
-        year: '2021',
-        mileage: 22000,
-        lastInspection: DateTime.now().subtract(const Duration(days: 15)),
-        driverName: 'Sarah Johnson',
-        rating: '1',
-        damage: 'No damage',
-        damageDescription: 'Vehicle in good condition',
-        notes: 'Recently serviced',
-        url: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800',
-      ),
-      Van(
-        id: 'mock-3',
-        plateNumber: '99',
-        model: 'Ford Transit',
-        status: 'Active',
-        year: '2023',
-        mileage: 8000,
-        lastInspection: DateTime.now().subtract(const Duration(days: 5)),
-        driverName: 'Mike Wilson',
-        rating: '3',
-        damage: 'Dent on side',
-        damageDescription: 'Small dent on passenger side',
-        notes: 'Needs repair scheduling',
-        url: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800',
-      ),
-    ];
-  }
-
-  List<Driver> _getMockDrivers() {
-    print('🔄 Using mock driver data as fallback');
-    return [
-      Driver(
-        id: 'mock-driver-1',
-        name: 'John Smith',
-        email: 'john@example.com',
-        phone: '555-0101',
         status: 'active',
-        createdAt: DateTime.now().subtract(const Duration(days: 90)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      Driver(
-        id: 'mock-driver-2',
-        name: 'Sarah Johnson',
-        email: 'sarah@example.com',
-        phone: '555-0102',
-        status: 'active',
-        createdAt: DateTime.now().subtract(const Duration(days: 60)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 2)),
+        lastInspection: DateTime.now(),
+        notes: 'Mock van for testing',
+        url: '',
+        driverName: 'Test Driver',
+        damage: 'No damage reported',
+        damageDescription: 'No damage reported',
+        rating: '0',
+        images: [],
+        maintenanceHistory: [],
       ),
     ];
   }

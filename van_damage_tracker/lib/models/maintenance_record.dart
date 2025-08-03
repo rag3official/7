@@ -1,4 +1,3 @@
-
 class MaintenanceRecord {
   final String id;
   final String vanId;

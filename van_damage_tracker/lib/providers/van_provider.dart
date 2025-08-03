@@ -1,16 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import '../models/van.dart';
-import '../services/supabase_service.dart';
+import '../services/van_service_optimized.dart';
 
 class VanProvider extends ChangeNotifier {
-  final SupabaseService _supabaseService = SupabaseService();
+  final VanServiceOptimized _vanService = VanServiceOptimized();
 
   List<Van> _vans = [];
   bool _isLoading = false;
   String? _error;
-  int _retryCount = 0;
-  Timer? _retryTimer;
   bool _databaseInitialized = false;
   bool _isInitialized = false;
 
@@ -31,15 +29,11 @@ class VanProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      _databaseInitialized = await _supabaseService.initializeDatabase();
-
-      if (_databaseInitialized) {
-        await refreshVans();
-        _setupRealTimeUpdates();
-        _isInitialized = true;
-      } else {
-        _error = 'Failed to initialize database schema';
-      }
+      // Use fast loading for initial load
+      print('🚀 Initializing with fast loading...');
+      _vans = await _vanService.getVansFast();
+      print('✅ Initial load completed: ${_vans.length} vans');
+      _isInitialized = true;
     } catch (e) {
       _error = 'Failed to initialize database: ${e.toString()}';
       debugPrint(_error);
@@ -49,14 +43,6 @@ class VanProvider extends ChangeNotifier {
     }
   }
 
-  // Set up real-time updates for vans
-  void _setupRealTimeUpdates() {
-    _supabaseService.subscribeToVans((updatedVans) {
-      _vans = updatedVans;
-      notifyListeners();
-    });
-  }
-
   // Fetch all vans from Supabase with retry logic
   Future<void> refreshVans() async {
     _isLoading = true;
@@ -64,14 +50,17 @@ class VanProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _vans = await _supabaseService.fetchVans(forceRefresh: true);
-      _error = null;
-      _retryCount = 0; // Reset retry count on success
+      print('🔄 VanProvider: Starting van refresh...');
 
-      // Cancel any pending retry
-      _retryTimer?.cancel();
-      _retryTimer = null;
+      // Clear cache before fetching fresh data
+      _vanService.clearCache();
+
+      _vans = await _vanService.getAllVans();
+      print(
+          '📊 VanProvider: Loaded ${_vans.length} vans with optimized service');
+      _error = null;
     } catch (e) {
+      print('❌ VanProvider: Error loading vans: $e');
       _handleError('Failed to load vans: ${e.toString()}');
     } finally {
       _isLoading = false;
@@ -79,26 +68,11 @@ class VanProvider extends ChangeNotifier {
     }
   }
 
-  // Handle errors with retry logic
+  // Handle errors without auto-retry
   void _handleError(String errorMessage) {
     _error = errorMessage;
     debugPrint(_error);
-
-    // Implement exponential backoff for retries
-    if (_retryCount < 3) {
-      // Maximum 3 retry attempts
-      _retryCount++;
-      final backoffSeconds = _retryCount * 2; // 2, 4, 6 seconds
-
-      debugPrint('Retry attempt $_retryCount in $backoffSeconds seconds');
-
-      // Schedule retry
-      _retryTimer?.cancel();
-      _retryTimer = Timer(Duration(seconds: backoffSeconds), () {
-        debugPrint('Retrying van data fetch (attempt $_retryCount)');
-        refreshVans();
-      });
-    }
+    // No auto-retry - user must manually refresh
   }
 
   // Save or update a van
@@ -107,7 +81,8 @@ class VanProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _supabaseService.saveVan(van);
+      // Clear cache to ensure fresh data
+      _vanService.clearCache();
       await refreshVans();
     } catch (e) {
       _error = 'Failed to save van: ${e.toString()}';
@@ -126,7 +101,8 @@ class VanProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _supabaseService.deleteVan(vanId);
+      // Clear cache to ensure fresh data
+      _vanService.clearCache();
       await refreshVans();
     } catch (e) {
       _error = 'Failed to delete van: ${e.toString()}';
@@ -140,7 +116,7 @@ class VanProvider extends ChangeNotifier {
   // Get a van by its number
   Van? getVanByNumber(String vanNumber) {
     try {
-      return _vans.firstWhere((van) => van.vanNumber == vanNumber);
+      return _vans.firstWhere((van) => van.plateNumber == vanNumber);
     } catch (e) {
       return null;
     }
@@ -157,7 +133,7 @@ class VanProvider extends ChangeNotifier {
 
   // Filter vans by type
   List<Van> getVansByType(String type) {
-    return _vans.where((van) => van.type == type).toList();
+    return _vans.where((van) => van.model == type).toList();
   }
 
   // Filter vans by status
@@ -167,12 +143,12 @@ class VanProvider extends ChangeNotifier {
 
   // Filter vans by driver
   List<Van> getVansByDriver(String driver) {
-    return _vans.where((van) => van.driver == driver).toList();
+    return _vans.where((van) => van.driverName == driver).toList();
   }
 
   // Get unique van types for filtering
   List<String> get vanTypes {
-    final types = _vans.map((van) => van.type).toSet().toList();
+    final types = _vans.map((van) => van.model).toSet().toList();
     types.sort();
     return types;
   }
@@ -186,25 +162,45 @@ class VanProvider extends ChangeNotifier {
 
   // Get unique drivers for filtering
   List<String> get drivers {
-    final driverList =
-        _vans
-            .map((van) => van.driver)
-            .where((d) => d.isNotEmpty)
-            .toSet()
-            .toList();
+    final driverList = _vans
+        .map((van) => van.driverName ?? '')
+        .where((d) => d.isNotEmpty)
+        .toSet()
+        .toList();
     driverList.sort();
     return driverList;
   }
 
-  // Public method to start listening to van updates
-  void startListeningToVans() {
-    _setupRealTimeUpdates();
+  // Background loading method for pre-loading data
+  Future<void> loadVansInBackground() async {
+    try {
+      print('📦 VanProvider: Starting background van loading...');
+
+      // Load vans without notifying listeners to avoid UI updates
+      final backgroundVans = await _vanService.getAllVans();
+
+      // Only update the internal list if we got data
+      if (backgroundVans.isNotEmpty) {
+        _vans = backgroundVans;
+        print(
+            '📦 VanProvider: Background loading completed - ${_vans.length} vans loaded');
+      } else {
+        print('📦 VanProvider: Background loading completed - no vans found');
+      }
+    } catch (e) {
+      print('❌ VanProvider: Background loading error: $e');
+      // Don't set error state for background loading
+    }
+  }
+
+  // Clear cache method for refresh functionality
+  void clearCache() {
+    _vanService.clearCache();
+    print('🗑️ VanProvider: Cache cleared');
   }
 
   @override
   void dispose() {
-    _supabaseService.unsubscribeFromVans();
-    _retryTimer?.cancel();
     super.dispose();
   }
 }

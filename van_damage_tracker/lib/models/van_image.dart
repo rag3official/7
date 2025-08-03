@@ -14,6 +14,7 @@ class VanImage {
   final String? location; // "front", "rear", "left", "right", "interior", etc.
   final String?
       vanSide; // "front", "rear", "driver_side", "passenger_side", "interior", "roof", "undercarriage", "unknown"
+  final String? vanDamage; // Damage description from van_damage field
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -43,6 +44,7 @@ class VanImage {
     this.damageLevel,
     this.location,
     this.vanSide,
+    this.vanDamage,
     required this.createdAt,
     required this.updatedAt,
     this.driverName,
@@ -69,6 +71,7 @@ class VanImage {
     int? damageLevel,
     String? location,
     String? vanSide,
+    String? vanDamage,
     DateTime? createdAt,
     DateTime? updatedAt,
     String? driverName,
@@ -94,6 +97,7 @@ class VanImage {
       damageLevel: damageLevel ?? this.damageLevel,
       location: location ?? this.location,
       vanSide: vanSide ?? this.vanSide,
+      vanDamage: vanDamage ?? this.vanDamage,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       driverName: driverName ?? this.driverName,
@@ -124,9 +128,10 @@ class VanImage {
               : DateTime.now()),
       description: json['description']?.toString(),
       damageType: json['damage_type']?.toString(),
-      damageLevel: json['damage_level']?.toInt(),
+      damageLevel: json['van_rating']?.toInt() ?? json['damage_level']?.toInt(),
       location: json['location']?.toString(),
       vanSide: json['van_side']?.toString(),
+      vanDamage: json['van_damage']?.toString(),
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -160,8 +165,10 @@ class VanImage {
       'description': description,
       'damage_type': damageType,
       'damage_level': damageLevel,
+      'van_rating': damageLevel,
       'location': location,
       'van_side': vanSide,
+      'van_damage': vanDamage,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -182,6 +189,7 @@ class VanImage {
         other.damageLevel == damageLevel &&
         other.location == location &&
         other.vanSide == vanSide &&
+        other.vanDamage == vanDamage &&
         other.createdAt == createdAt &&
         other.updatedAt == updatedAt;
   }
@@ -200,6 +208,7 @@ class VanImage {
       damageLevel,
       location,
       vanSide,
+      vanDamage,
       createdAt,
       updatedAt,
     );

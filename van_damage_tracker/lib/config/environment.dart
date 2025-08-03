@@ -73,12 +73,9 @@ class Environment {
 
   static Future<void> initialize() async {
     try {
-      if (!kDebugMode) {
-        await dotenv.load();
-        debugPrint('Environment variables loaded successfully');
-      } else {
-        debugPrint('Running in debug mode with development configuration');
-      }
+      // Always try to load .env file, regardless of debug mode
+      await dotenv.load();
+      debugPrint('Environment variables loaded successfully');
     } catch (e) {
       debugPrint('Warning: .env file not found, using default values');
     }
@@ -92,14 +89,14 @@ class Environment {
     }
 
     try {
-      if (kDebugMode) {
-        // In debug mode, always use default values
-        return defaultValue ?? _defaultValues[key] ?? '';
+      // Always try to get from .env first, regardless of debug mode
+      final envValue = dotenv.env[key];
+      if (envValue != null && envValue.isNotEmpty) {
+        return envValue;
       }
 
-      // In production, try to get from .env first
-      final value =
-          dotenv.env[key] ?? defaultValue ?? _defaultValues[key] ?? '';
+      // Fall back to default values if .env doesn't have the key
+      final value = defaultValue ?? _defaultValues[key] ?? '';
       if (value.isEmpty) {
         debugPrint('Warning: Environment variable $key is empty');
       }

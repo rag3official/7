@@ -7,72 +7,189 @@ import '../models/driver.dart';
 
 class VanService {
   final SupabaseClient _supabase = Supabase.instance.client;
+  List<Van>? _cachedVans;
+  DateTime? _lastCacheTime;
+  static const Duration _cacheValidDuration = Duration(minutes: 5);
 
   // Get all vans from the database using optimized queries
   Future<List<Van>> getAllVans() async {
     try {
-      print('🔍 Attempting to fetch vans from Supabase...');
-      print('🌐 Running on: ${kIsWeb ? 'web' : Platform.operatingSystem}');
-
-      // First, get just the basic van profiles without complex joins
-      final response = await _supabase
-          .from('van_profiles')
-          .select('*')
-          .order('created_at', ascending: false)
-          .limit(50); // Limit to prevent excessive data
-
-      print(
-          '✅ Successfully fetched ${response.length} van profiles from database');
-
-      if (response.isNotEmpty) {
-        print(
-            '📝 First van: ${response.first['van_number']} (${response.first['make']})');
+      // Check cache first
+      if (_cachedVans != null && _lastCacheTime != null) {
+        final timeSinceCache = DateTime.now().difference(_lastCacheTime!);
+        if (timeSinceCache < _cacheValidDuration) {
+          print('📦 Returning cached vans (${_cachedVans!.length} vans)');
+          return _cachedVans!;
+        }
       }
 
-      // Convert van_profiles data to Van objects
-      List<Van> vans = [];
-      for (final item in response) {
+      print(
+          '🔍 Attempting to fetch vans from Supabase with optimized queries...');
+      print('🌐 Running on: ${kIsWeb ? 'web' : Platform.operatingSystem}');
+
+      // Step 1: Get all van profiles in one query
+      final vanProfilesResponse =
+          await _supabase.from('van_profiles').select('''
+            id,
+            van_number,
+            make,
+            model,
+            year,
+            status,
+            notes,
+            created_at,
+            updated_at
+          ''').order('created_at', ascending: false).limit(50);
+
+      print('✅ Fetched ${vanProfilesResponse.length} van profiles');
+
+      if (vanProfilesResponse.isEmpty) {
+        print('⚠️ No van profiles found');
+        return [];
+      }
+
+      // Step 2: Get all van numbers for batch image query
+      final vanNumbers = vanProfilesResponse
+          .map((profile) => profile['van_number']?.toString() ?? '')
+          .where((number) => number.isNotEmpty)
+          .toList();
+
+      // Step 3: Batch load all images for all vans in one query
+      List<Map<String, dynamic>> allImagesResponse = [];
+      if (vanNumbers.isNotEmpty) {
         try {
-          final vanProfile = item;
+          allImagesResponse = await _supabase
+              .from('van_images')
+              .select('''
+                id,
+                van_number,
+                image_url,
+                image_data,
+                van_damage,
+                van_rating,
+                van_side,
+                damage_type,
+                damage_severity,
+                damage_location,
+                created_at,
+                uploaded_by
+              ''')
+              .inFilter('van_number', vanNumbers)
+              .order('created_at', ascending: false)
+              .limit(200); // Increased limit for batch loading
+
+          print(
+              '📷 Batch loaded ${allImagesResponse.length} images for all vans');
+        } catch (e) {
+          print('⚠️ Could not batch load images: $e');
+          allImagesResponse = [];
+        }
+      }
+
+      // Step 4: Group images by van number for efficient lookup
+      final Map<String, List<VanImage>> imagesByVanNumber = {};
+      for (final imageData in allImagesResponse) {
+        final vanNumber = imageData['van_number']?.toString() ?? '';
+        if (vanNumber.isNotEmpty) {
+          try {
+            final vanImage = VanImage.fromJson(imageData);
+            imagesByVanNumber.putIfAbsent(vanNumber, () => []).add(vanImage);
+          } catch (e) {
+            print('⚠️ Error processing image for van $vanNumber: $e');
+          }
+        }
+      }
+
+      // Step 5: Create van objects with optimized damage calculation
+      List<Van> vans = [];
+      for (final vanProfile in vanProfilesResponse) {
+        try {
+          final vanNumber = vanProfile['van_number']?.toString() ?? '';
+          final vanImages = imagesByVanNumber[vanNumber] ?? [];
+
+          // Optimized damage calculation
+          String aggregatedDamageDescription = 'No damage reported';
+          int maxDamageRating = 0;
+
+          if (vanImages.isNotEmpty) {
+            // Find the highest damage rating
+            maxDamageRating = vanImages
+                .map((img) => img.damageLevel ?? 0)
+                .reduce((a, b) => a > b ? a : b);
+
+            // Get the most recent damage description
+            final latestImage = vanImages
+                .reduce((a, b) => a.uploadedAt.isAfter(b.uploadedAt) ? a : b);
+
+            if (latestImage.vanDamage != null &&
+                latestImage.vanDamage!.isNotEmpty) {
+              aggregatedDamageDescription = latestImage.vanDamage!;
+            } else if (maxDamageRating > 0) {
+              // Create generic damage description based on rating
+              switch (maxDamageRating) {
+                case 1:
+                  aggregatedDamageDescription = 'Minor damage detected';
+                  break;
+                case 2:
+                  aggregatedDamageDescription = 'Moderate damage detected';
+                  break;
+                case 3:
+                  aggregatedDamageDescription = 'Major damage detected';
+                  break;
+              }
+            }
+          }
 
           final van = Van(
             id: vanProfile['id']?.toString() ?? '',
-            plateNumber: vanProfile['van_number']?.toString() ?? '',
-            model: vanProfile['make']?.toString() ?? 'Unknown',
-            year: vanProfile['model']?.toString() ?? 'Unknown',
-            status: vanProfile['status']?.toString() ?? 'Active',
+            plateNumber: vanNumber,
+            model: vanProfile['model']?.toString() ??
+                vanProfile['make']?.toString() ??
+                'Unknown',
+            year: vanProfile['year']?.toString() ??
+                vanProfile['model']?.toString() ??
+                'Unknown',
+            status: vanProfile['status']?.toString() ?? 'active',
             lastInspection:
                 DateTime.tryParse(vanProfile['created_at']?.toString() ?? '') ??
                     DateTime.now(),
             notes: vanProfile['notes']?.toString() ?? '',
-            url: '', // Will be populated later if needed
-            driverName: 'Loading...', // Will be populated separately
-            damage: 'No damage reported',
-            damageDescription: 'No damage reported',
-            rating: '0',
-            images: [], // Will be populated when needed
+            url: '',
+            driverName: '', // No driver name column in your table
+            damage: aggregatedDamageDescription,
+            damageDescription: aggregatedDamageDescription,
+            rating: maxDamageRating.toString(),
+            images: vanImages,
             maintenanceHistory: [],
           );
 
           vans.add(van);
-          print('✅ Processed van: ${van.plateNumber}');
         } catch (e) {
           print('❌ Error processing van profile: $e');
         }
       }
 
-      print('✅ Successfully processed ${vans.length} vans');
+      // Cache the results
+      _cachedVans = vans;
+      _lastCacheTime = DateTime.now();
+
+      print(
+          '✅ Successfully processed ${vans.length} vans with optimized queries');
+      print('📊 Cache updated with ${vans.length} vans');
+
       return vans;
     } catch (e) {
       print('❌ Error fetching vans: $e');
       print('🔧 Error type: ${e.runtimeType}');
 
-      // Check if this is a timeout or connection error
-      if (e.toString().contains('timeout') ||
-          e.toString().contains('57014') ||
-          e.toString().contains('canceling statement')) {
-        print('⏱️ Database timeout detected - returning simplified data');
-        return _getSimplifiedVans();
+      // Return cached data if available and error is network-related
+      if (_cachedVans != null &&
+          (e.toString().contains('timeout') ||
+              e.toString().contains('57014') ||
+              e.toString().contains('canceling statement') ||
+              e.toString().contains('network'))) {
+        print('⏱️ Network error detected - returning cached data');
+        return _cachedVans!;
       }
 
       // Check if this is a network/permission error on macOS
@@ -86,6 +203,13 @@ class VanService {
 
       rethrow;
     }
+  }
+
+  // Clear cache when data is updated
+  void clearCache() {
+    _cachedVans = null;
+    _lastCacheTime = null;
+    print('🗑️ Van cache cleared');
   }
 
   // Simplified method to get basic van data when complex queries timeout
@@ -105,18 +229,23 @@ class VanService {
         return Van(
           id: item['id']?.toString() ?? '',
           plateNumber: item['van_number']?.toString() ?? 'Unknown',
-          model: item['make']?.toString() ?? 'Unknown',
-          year: item['model']?.toString() ?? 'Unknown',
-          status: item['status']?.toString() ?? 'Active',
+          model: item['model']?.toString() ??
+              item['make']?.toString() ??
+              'Unknown',
+          year: item['year']?.toString() ??
+              item['model']?.toString() ??
+              'Unknown',
+          status: item['status']?.toString() ?? 'active',
           lastInspection:
               DateTime.tryParse(item['created_at']?.toString() ?? '') ??
                   DateTime.now(),
           notes: 'Basic van profile',
           url: '',
-          driverName: 'Not loaded',
-          damage: 'Status unknown',
-          damageDescription: 'Status unknown',
-          rating: '0',
+          driverName: '', // No driver name column in your table
+          damage: item['damage_description']?.toString() ?? 'Status unknown',
+          damageDescription:
+              item['damage_description']?.toString() ?? 'Status unknown',
+          rating: item['rating']?.toString() ?? '0',
           images: [],
           maintenanceHistory: [],
         );
