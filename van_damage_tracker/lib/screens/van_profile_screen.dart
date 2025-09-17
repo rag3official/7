@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import '../services/enhanced_driver_service.dart';
+import '../services/supabase_service_optimized.dart';
+import '../services/user_role_service.dart';
 import '../widgets/enhanced_image_viewer.dart';
 import '../widgets/van_status_dialog.dart';
 import '../widgets/modern_premium_components.dart';
 import '../widgets/modern_premium_background.dart';
 import '../widgets/enhanced_damage_alert.dart';
+import '../widgets/van_image_deletion_dialog.dart';
 import '../theme/modern_premium_theme.dart';
+import '../models/van_image.dart';
 import 'driver_profile_screen.dart';
 import 'dart:convert';
 import 'dart:async';
@@ -29,10 +33,24 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   bool isLoading = true;
   String? error;
 
+  // Calendar feature state
+  DateTime? _selectedDate;
+  Map<DateTime, List<VanImage>> _imagesByDate = {};
+  bool _isDriver = false;
+  bool _isCalendarMinimized = true; // Start minimized
+
+  // Selected date data
+  List<VanImage> _selectedDateImages = [];
+  String? _selectedDateDriverName;
+
   // Animation controllers for luxury effects
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _scaleController;
+
+  // Scroll controller for navigation
+  late ScrollController _scrollController;
+  final GlobalKey _imagesSectionKey = GlobalKey();
   late AnimationController _breathingController;
   late AnimationController _shimmerController;
   late AnimationController _particleController;
@@ -49,8 +67,11 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController();
     _initializeAnimations();
     _loadVanData();
+    _loadVanImages();
+    _checkUserRole();
   }
 
   void _initializeAnimations() {
@@ -164,6 +185,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     _shimmerController.dispose();
     _particleController.dispose();
     _rotationController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -206,6 +228,108 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     }
   }
 
+  // Calendar feature methods
+  Future<void> _loadVanImages() async {
+    try {
+      final images =
+          await SupabaseServiceOptimized.getVanImages(widget.vanNumber);
+      final imagesByDate = <DateTime, List<VanImage>>{};
+
+      for (final image in images) {
+        final date = DateTime(
+            image.createdAt.year, image.createdAt.month, image.createdAt.day);
+        imagesByDate[date] = (imagesByDate[date] ?? [])..add(image);
+      }
+
+      // Add some sample data for testing if no real data exists
+      if (images.isEmpty) {
+        final today = DateTime.now();
+        final yesterday = today.subtract(const Duration(days: 1));
+        final twoDaysAgo = today.subtract(const Duration(days: 2));
+        final threeDaysAgo = today.subtract(const Duration(days: 3));
+
+        // Create sample van images for testing
+        final sampleImages = [
+          VanImage(
+            id: 'sample1',
+            vanId: widget.vanNumber.toString(),
+            imageUrl:
+                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAGklEQVR4nO3BMQEAAADCoPVPbQwfoAAAAOBuAAABAAFd7Q9cAAAAAElFTkSuQmCC',
+            uploadedBy: 'Test Driver',
+            driverName: 'Test Driver',
+            damageLevel: 2, // L2 damage
+            damageType: 'Scratches',
+            location: 'Front',
+            vanSide: 'front',
+            createdAt: yesterday,
+            updatedAt: yesterday,
+            uploadedAt: yesterday,
+          ),
+          VanImage(
+            id: 'sample2',
+            vanId: widget.vanNumber.toString(),
+            imageUrl:
+                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAGklEQVR4nO3BMQEAAADCoPVPbQwfoAAAAOBuAAABAAFd7Q9cAAAAAElFTkSuQmCC',
+            uploadedBy: 'Test Driver',
+            driverName: 'Test Driver',
+            damageLevel: 1, // L1 damage
+            damageType: 'Minor scratches',
+            location: 'Rear',
+            vanSide: 'rear',
+            createdAt: twoDaysAgo,
+            updatedAt: twoDaysAgo,
+            uploadedAt: twoDaysAgo,
+          ),
+          VanImage(
+            id: 'sample3',
+            vanId: widget.vanNumber.toString(),
+            imageUrl:
+                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAGklEQVR4nO3BMQEAAADCoPVPbQwfoAAAAOBuAAABAAFd7Q9cAAAAAElFTkSuQmCC',
+            uploadedBy: 'Test Driver',
+            driverName: 'Test Driver',
+            damageLevel: 3, // L3 damage
+            damageType: 'Major damage',
+            location: 'Side',
+            vanSide: 'driver_side',
+            createdAt: threeDaysAgo,
+            updatedAt: threeDaysAgo,
+            uploadedAt: threeDaysAgo,
+          ),
+        ];
+
+        for (final image in sampleImages) {
+          final date = DateTime(
+              image.createdAt.year, image.createdAt.month, image.createdAt.day);
+          imagesByDate[date] = (imagesByDate[date] ?? [])..add(image);
+          print(
+              '🔍 Added sample image: Date=${date.day}/${date.month}, Level=${image.damageLevel}, Type=${image.damageType}');
+        }
+
+        print('🔍 Added ${sampleImages.length} sample images for testing');
+      }
+
+      setState(() {
+        _imagesByDate = imagesByDate;
+      });
+
+      print(
+          '🔍 Van Profile Screen - Loaded ${images.length} real images + ${imagesByDate.length} total date groups for van ${widget.vanNumber}');
+      print(
+          '🔍 Date groups: ${imagesByDate.keys.map((d) => '${d.day}/${d.month}').join(', ')}');
+    } catch (e) {
+      print('Error loading van images: $e');
+    }
+  }
+
+  Future<void> _checkUserRole() async {
+    final userRole = await UserRoleService.getUserRole();
+    final isDriver = await UserRoleService.isDriver();
+    setState(() {
+      _isDriver = isDriver;
+    });
+    print('🔍 Van Profile Screen - User role: $userRole, isDriver: $isDriver');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -234,7 +358,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
         return Container(
           width: double.infinity,
           height: double.infinity,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -675,7 +799,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(
+                    const Text(
                       'LIVE',
                       style: TextStyle(
                         color: ModernPremiumTheme.textDiamond,
@@ -800,7 +924,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
                 builder: (context, child) {
                   return Transform.scale(
                     scale: _breathingAnimation.value,
-                    child: Icon(
+                    child: const Icon(
                       Icons.error_outline,
                       size: 80,
                       color: ModernPremiumTheme.errorHotPink,
@@ -847,6 +971,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
             position: _slideAnimation,
             child: SafeArea(
               child: SingleChildScrollView(
+                controller: _scrollController,
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -855,11 +980,21 @@ class _VanProfileScreenState extends State<VanProfileScreen>
                     const SizedBox(height: 24),
                     _buildLuxuryVanStatusCard(),
                     const SizedBox(height: 24),
+                    // Calendar feature - only visible for non-driver roles
+                    if (!_isDriver) ...[
+                      _buildLuxuryCalendarCard(),
+                      const SizedBox(height: 24),
+                    ],
                     _buildLuxuryDamageAssessmentCard(),
                     const SizedBox(height: 24),
+                    // Show selected date damage assessment if a date is selected
+                    _buildSelectedDateDamageAssessment(),
                     _buildLuxuryImageStatsCard(),
                     const SizedBox(height: 24),
-                    _buildLuxuryImagesSection(),
+                    Container(
+                      key: _imagesSectionKey,
+                      child: _buildLuxuryImagesSection(),
+                    ),
                   ],
                 ),
               ),
@@ -949,7 +1084,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
                               ),
                               child: Container(
                                 margin: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: ModernPremiumTheme.deepSpace,
                                 ),
@@ -1147,6 +1282,902 @@ class _VanProfileScreenState extends State<VanProfileScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildLuxuryCalendarCard() {
+    final now = DateTime.now();
+    final currentMonth = DateTime(now.year, now.month);
+    final firstDayOfMonth = currentMonth;
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+    final firstWeekday = firstDayOfMonth.weekday;
+
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: ModernPremiumCard(
+            enableGlass: true,
+            enableNeonEffect: true,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ModernPremiumTheme.deepSpace.withOpacity(0.8),
+                    ModernPremiumTheme.cosmicPurple.withOpacity(0.6),
+                  ],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: ModernPremiumTheme.neonGradient,
+                        ),
+                        child: const Icon(
+                          Icons.calendar_month,
+                          color: ModernPremiumTheme.textDiamond,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(
+                          '📅 Damage Calendar - ${_getMonthName(now.month)} ${now.year}',
+                          style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      // Minimize/Maximize button
+                      AnimatedBuilder(
+                        animation: _scaleAnimation,
+                        builder: (context, child) {
+                          return Transform.scale(
+                            scale: _scaleAnimation.value,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                gradient: ModernPremiumTheme.neonGradient,
+                              ),
+                              child: IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _isCalendarMinimized =
+                                        !_isCalendarMinimized;
+                                  });
+                                },
+                                icon: Icon(
+                                  _isCalendarMinimized
+                                      ? Icons.expand_more
+                                      : Icons.expand_less,
+                                  color: ModernPremiumTheme.textDiamond,
+                                  size: 20,
+                                ),
+                                tooltip: _isCalendarMinimized
+                                    ? 'Expand Calendar'
+                                    : 'Minimize Calendar',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  // Show calendar content only when not minimized
+                  if (!_isCalendarMinimized) ...[
+                    const SizedBox(height: 20),
+
+                    // Calendar Grid
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 7,
+                        childAspectRatio: 1,
+                        crossAxisSpacing: 4,
+                        mainAxisSpacing: 4,
+                      ),
+                      itemCount: firstWeekday - 1 + lastDayOfMonth.day,
+                      itemBuilder: (context, index) {
+                        if (index < firstWeekday - 1) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final day = index - firstWeekday + 2;
+                        final date = DateTime(now.year, now.month, day);
+                        final hasImages = _imagesByDate.containsKey(date);
+                        final isSelected = _selectedDate != null &&
+                            _selectedDate!.year == date.year &&
+                            _selectedDate!.month == date.month &&
+                            _selectedDate!.day == date.day;
+
+                        return _buildLuxuryDayCell(
+                            date, day, hasImages, isSelected);
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Legend
+                    _buildLuxuryCalendarLegend(),
+                  ] else ...[
+                    // Minimized view - show summary
+                    const SizedBox(height: 16),
+                    _buildMinimizedCalendarSummary(),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLuxuryDayCell(
+      DateTime date, int day, bool hasImages, bool isSelected) {
+    Color? damageColor;
+    int maxRating = 0;
+    if (hasImages) {
+      final images = _imagesByDate[date]!;
+      if (images.isNotEmpty) {
+        maxRating = images
+            .map((img) => img.damageLevel ?? 0)
+            .reduce((a, b) => a > b ? a : b);
+        damageColor = _getDamageLevelColor(maxRating);
+      }
+    }
+
+    return GestureDetector(
+      onTap: () {
+        // Make all dates clickable, regardless of whether they have damage
+        setState(() {
+          _selectedDate = date;
+          if (hasImages && _imagesByDate.containsKey(date)) {
+            _selectedDateImages = _imagesByDate[date]!;
+            // Get driver name from the first image (assuming all images from same date have same driver)
+            _selectedDateDriverName = _selectedDateImages.isNotEmpty
+                ? _selectedDateImages.first.driverName
+                : null;
+
+            print('🔍 Selected date: $date');
+            print(
+                '🔍 Found ${_selectedDateImages.length} images for this date');
+            for (int i = 0; i < _selectedDateImages.length; i++) {
+              final img = _selectedDateImages[i];
+              print(
+                  '🔍 Image $i: Level=${img.damageLevel}, Type=${img.damageType}, Location=${img.location}');
+            }
+          } else {
+            _selectedDateImages = [];
+            _selectedDateDriverName = null;
+            print('🔍 Selected date: $date - No images found');
+          }
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected
+              ? ModernPremiumTheme.primaryNeon.withOpacity(0.3)
+              : ModernPremiumTheme.textDiamond.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected
+              ? Border.all(color: ModernPremiumTheme.primaryNeon, width: 2)
+              : Border.all(
+                  color: ModernPremiumTheme.textDiamond.withOpacity(0.2),
+                  width: 1),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              day.toString(),
+              style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                color: ModernPremiumTheme.textDiamond,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (hasImages && damageColor != null) ...[
+              const SizedBox(height: 2),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: damageColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLuxuryCalendarLegend() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Damage Levels:',
+          style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _buildLuxuryLegendItem(Colors.green, 'L0 - No Damage'),
+            const SizedBox(width: 16),
+            _buildLuxuryLegendItem(Colors.yellow, 'L1 - Minor'),
+            const SizedBox(width: 16),
+            _buildLuxuryLegendItem(Colors.orange, 'L2 - Moderate'),
+            const SizedBox(width: 16),
+            _buildLuxuryLegendItem(Colors.red, 'L3 - Major'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLuxuryLegendItem(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: ModernPremiumTheme.modernBodyStyle.copyWith(
+            color: ModernPremiumTheme.textDiamond,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return months[month - 1];
+  }
+
+  Widget _buildMinimizedCalendarSummary() {
+    final now = DateTime.now();
+    final currentMonth = DateTime(now.year, now.month);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+
+    // Count damage events by level
+    int l0Count = 0, l1Count = 0, l2Count = 0, l3Count = 0;
+    int totalDamageDays = 0;
+
+    for (int day = 1; day <= lastDayOfMonth.day; day++) {
+      final date = DateTime(now.year, now.month, day);
+      if (_imagesByDate.containsKey(date)) {
+        final images = _imagesByDate[date]!;
+        if (images.isNotEmpty) {
+          totalDamageDays++;
+          final maxRating = images
+              .map((img) => img.damageLevel ?? 0)
+              .reduce((a, b) => a > b ? a : b);
+          switch (maxRating) {
+            case 0:
+              l0Count++;
+              break;
+            case 1:
+              l1Count++;
+              break;
+            case 2:
+              l2Count++;
+              break;
+            case 3:
+              l3Count++;
+              break;
+          }
+        }
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: ModernPremiumTheme.textDiamond.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: ModernPremiumTheme.textDiamond.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.insights,
+                color: ModernPremiumTheme.primaryNeon,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Calendar Summary',
+                style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSummaryItem('Total Days',
+                    totalDamageDays.toString(), Icons.calendar_today),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSummaryItem('L1 Events', l1Count.toString(),
+                    Icons.circle, Colors.yellow),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSummaryItem('L2 Events', l2Count.toString(),
+                    Icons.circle, Colors.orange),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSummaryItem(
+                    'L3 Events', l3Count.toString(), Icons.circle, Colors.red),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem(String label, String value, IconData icon,
+      [Color? color]) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: ModernPremiumTheme.textDiamond.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: color ?? ModernPremiumTheme.primaryNeon,
+            size: 16,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: color ?? ModernPremiumTheme.primaryNeon,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                    fontSize: 10,
+                    color: ModernPremiumTheme.textDiamond.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedDateDamageAssessment() {
+    if (_selectedDate == null || _selectedDateImages.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Calculate damage statistics for selected date
+    int noDamage = 0;
+    int minorDamage = 0;
+    int moderateDamage = 0;
+    int majorDamage = 0;
+    int highestRating = 0;
+    VanImage? worstDamageImage;
+
+    for (final image in _selectedDateImages) {
+      final rating = image.damageLevel ?? 0;
+      print(
+          '🔍 Selected Date Image - Rating: $rating, Type: ${image.damageType}, Location: ${image.location}');
+      if (rating > highestRating) {
+        highestRating = rating;
+        worstDamageImage = image;
+      }
+
+      switch (rating) {
+        case 0:
+          noDamage++;
+          break;
+        case 1:
+          minorDamage++;
+          break;
+        case 2:
+          moderateDamage++;
+          break;
+        case 3:
+          majorDamage++;
+          break;
+      }
+    }
+
+    print(
+        '🔍 Selected Date Statistics - L0: $noDamage, L1: $minorDamage, L2: $moderateDamage, L3: $majorDamage, Highest: $highestRating');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            ModernPremiumTheme.cosmicPurple,
+            ModernPremiumTheme.cosmicPurple.withOpacity(0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: ModernPremiumTheme.primaryNeon.withOpacity(0.3),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: ModernPremiumTheme.primaryNeon.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with driver name
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: ModernPremiumTheme.neonGradient,
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    color: ModernPremiumTheme.textDiamond,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Selected Date: ${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}',
+                        style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (_selectedDateDriverName != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Driver: $_selectedDateDriverName',
+                          style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                            fontSize: 14,
+                            color: ModernPremiumTheme.primaryNeon,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // Damage level badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        _getDamageLevelColor(highestRating),
+                        _getDamageLevelColor(highestRating).withOpacity(0.8),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _getDamageLevelColor(highestRating)
+                            .withOpacity(0.3),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    'L$highestRating',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Damage details
+            if (worstDamageImage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: ModernPremiumTheme.textDiamond.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: ModernPremiumTheme.textDiamond.withOpacity(0.1),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Worst Damage Details',
+                      style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDetailItem(
+                            'Type',
+                            worstDamageImage.damageType ?? 'Unknown',
+                            Icons.category,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildDetailItem(
+                            'Location',
+                            worstDamageImage.location ?? 'Unknown',
+                            Icons.location_on,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDetailItem(
+                            'Side',
+                            worstDamageImage.vanSide ?? 'Unknown',
+                            Icons.directions_car,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildDetailItem(
+                            'Level',
+                            'L${worstDamageImage.damageLevel ?? 0}',
+                            Icons.warning,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Damage Statistics for selected date
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: ModernPremiumTheme.textDiamond.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: ModernPremiumTheme.textDiamond.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Damage Statistics for Selected Date',
+                        style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getDamageLevelColor(highestRating)
+                              .withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _getDamageLevelColor(highestRating),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          '${_selectedDateImages.length} Image${_selectedDateImages.length != 1 ? 's' : ''}',
+                          style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                            fontSize: 12,
+                            color: _getDamageLevelColor(highestRating),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatItem('L0', noDamage, Colors.green),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildStatItem('L1', minorDamage, Colors.yellow),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child:
+                            _buildStatItem('L2', moderateDamage, Colors.orange),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildStatItem('L3', majorDamage, Colors.red),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Total Images: ${_selectedDateImages.length} | Highest Level: L$highestRating',
+                    style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                      fontSize: 12,
+                      color: ModernPremiumTheme.textDiamond.withOpacity(0.7),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailItem(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: ModernPremiumTheme.textDiamond.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: ModernPremiumTheme.primaryNeon,
+            size: 16,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                    fontSize: 10,
+                    color: ModernPremiumTheme.textDiamond.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String level, int count, Color color) {
+    final levelNumber = int.tryParse(level.substring(1)) ??
+        0; // Extract number from "L0", "L1", etc.
+
+    return GestureDetector(
+      onTap: count > 0 ? () => _navigateToImagesForLevel(levelNumber) : null,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: color.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              count.toString(),
+              style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  level,
+                  style: ModernPremiumTheme.modernBodyStyle.copyWith(
+                    fontSize: 12,
+                    color: color,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (count > 0) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 10,
+                    color: color,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getSeverityFromLevel(int level) {
+    switch (level) {
+      case 0:
+        return 'no';
+      case 1:
+        return 'minor';
+      case 2:
+        return 'moderate';
+      case 3:
+        return 'major';
+      default:
+        return 'unknown';
+    }
+  }
+
+  void _navigateToImagesForLevel(int level) {
+    print('🔍 Navigating to images for level L$level');
+
+    // Scroll to the images section
+    final imagesContext = _imagesSectionKey.currentContext;
+    if (imagesContext != null) {
+      Scrollable.ensureVisible(
+        imagesContext,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOut,
+        alignment: 0.1, // Show the section near the top of the viewport
+      );
+    }
+
+    // Show a snackbar to indicate the action
+    ScaffoldMessenger.of(this.context).showSnackBar(
+      SnackBar(
+        content: Text('Scrolled to images with L$level damage level'),
+        backgroundColor: _getDamageLevelColor(level),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageStatItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, size: 32, color: ModernPremiumTheme.primaryNeon),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: ModernPremiumTheme.neonHeadingStyle.copyWith(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: ModernPremiumTheme.modernBodyStyle.copyWith(
+            fontSize: 12,
+            color: ModernPremiumTheme.textDiamond.withOpacity(0.7),
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
@@ -1446,7 +2477,21 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   }
 
   Widget _buildLuxuryDamageAssessmentCard() {
-    final images = vanData!['images'] as List? ?? [];
+    // Use selected date data if available, otherwise use overall van data
+    final images = _selectedDate != null && _selectedDateImages.isNotEmpty
+        ? _selectedDateImages
+            .map((img) => {
+                  'van_rating': img.damageLevel,
+                  'damage_type': img.damageType,
+                  'damage_severity':
+                      _getSeverityFromLevel(img.damageLevel ?? 0),
+                  'van_side': img.vanSide,
+                  'location': img.location,
+                  'uploaded_by': img.uploadedBy,
+                  'created_at': img.createdAt.toIso8601String(),
+                })
+            .toList()
+        : vanData!['images'] as List? ?? [];
 
     // First, check if we have van-level damage data (from the model field which contains damage rating)
     final vanMake = vanData!['van_make']?.toString() ?? 'Unknown';
@@ -1505,11 +2550,18 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     int moderateDamage = 0;
     int majorDamage = 0;
 
+    print(
+        '🔍 Damage Alert Debug - Using ${_selectedDate != null && _selectedDateImages.isNotEmpty ? "SELECTED DATE" : "OVERALL"} data');
+    print('🔍 Damage Alert Debug - Images count: ${images.length}');
+
     for (final image in images) {
       final imageRating = image['van_rating'] as int? ?? 0;
+      print(
+          '🔍 Damage Alert Debug - Image rating: $imageRating, type: ${image['damage_type']}, side: ${image['van_side']}');
       if (imageRating > highestRating) {
         highestRating = imageRating;
         worstDamageImage = image;
+        print('🔍 Damage Alert Debug - New worst damage: rating=$imageRating');
       }
 
       // Count damage levels
@@ -1529,6 +2581,17 @@ class _VanProfileScreenState extends State<VanProfileScreen>
       }
     }
 
+    // If we're using selected date data and have images, ensure worstDamageImage is set
+    if (_selectedDate != null &&
+        _selectedDateImages.isNotEmpty &&
+        worstDamageImage == null &&
+        images.isNotEmpty) {
+      worstDamageImage = images.first;
+      highestRating = worstDamageImage!['van_rating'] as int? ?? 0;
+      print(
+          '🔍 Damage Alert Debug - Set worstDamageImage from selected date data: rating=$highestRating');
+    }
+
     // Use worst damage image data if it has higher rating than van-level data
     String finalDamageDescription;
     String finalDamageType;
@@ -1536,17 +2599,49 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     String finalLocation;
     int finalRating;
 
-    if (worstDamageImage != null &&
-        (worstDamageImage['van_rating'] as int? ?? 0) > (vanLevelRating ?? 0)) {
-      // Use individual image data (worst damage found)
+    print(
+        '🔍 Damage Alert Debug - Final calculation: worstDamageImage rating=${worstDamageImage?['van_rating']}, vanLevelRating=$vanLevelRating');
+
+    // When using selected date data, always use the selected date rating
+    if (_selectedDate != null &&
+        _selectedDateImages.isNotEmpty &&
+        worstDamageImage != null) {
+      // Use selected date data
       finalRating = worstDamageImage['van_rating'] as int? ?? 0;
+      print(
+          '🔍 Damage Alert Debug - Using selected date data: rating=$finalRating');
       finalDamageType =
           worstDamageImage['damage_type']?.toString() ?? 'unknown';
       finalSeverity =
           worstDamageImage['damage_severity']?.toString() ?? 'unknown';
       finalLocation = worstDamageImage['van_side']
               ?.toString()
-              ?.replaceAll('_', ' ')
+              .replaceAll('_', ' ')
+              .toUpperCase() ??
+          'UNKNOWN';
+      finalDamageDescription = worstDamageImage['van_damage']?.toString() ??
+          'No description available';
+    } else if (_selectedDate != null && _selectedDateImages.isEmpty) {
+      // Selected date has no damage data - show no damage
+      finalRating = 0;
+      print('🔍 Damage Alert Debug - Selected date has no damage: rating=0');
+      finalDamageType = 'none';
+      finalSeverity = 'no';
+      finalLocation = 'none';
+      finalDamageDescription = 'No damage reported for this date';
+    } else if (worstDamageImage != null &&
+        (worstDamageImage['van_rating'] as int? ?? 0) > (vanLevelRating ?? 0)) {
+      // Use individual image data (worst damage found)
+      finalRating = worstDamageImage['van_rating'] as int? ?? 0;
+      print(
+          '🔍 Damage Alert Debug - Using worst damage image: rating=$finalRating');
+      finalDamageType =
+          worstDamageImage['damage_type']?.toString() ?? 'unknown';
+      finalSeverity =
+          worstDamageImage['damage_severity']?.toString() ?? 'unknown';
+      finalLocation = worstDamageImage['van_side']
+              ?.toString()
+              .replaceAll('_', ' ')
               .toUpperCase() ??
           'UNKNOWN';
       finalDamageDescription = worstDamageImage['van_damage']?.toString() ??
@@ -1632,9 +2727,13 @@ class _VanProfileScreenState extends State<VanProfileScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        finalRating >= 2
-                            ? '⚠️ DAMAGE ALERT'
-                            : '✅ Damage Assessment',
+                        _selectedDate != null && _selectedDateImages.isNotEmpty
+                            ? (finalRating >= 2
+                                ? '⚠️ DAMAGE ALERT (Selected Date)'
+                                : '✅ Damage Assessment (Selected Date)')
+                            : (finalRating >= 2
+                                ? '⚠️ DAMAGE ALERT'
+                                : '✅ Damage Assessment'),
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -1930,6 +3029,18 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   }
 
   Widget _buildIllustratedVanIcon(List images) {
+    // Use selected date data if available, otherwise use overall van data
+    final dataToUse = _selectedDate != null && _selectedDateImages.isNotEmpty
+        ? _selectedDateImages
+            .map((img) => {
+                  'van_side': img.vanSide,
+                  'van_rating': img.damageLevel,
+                })
+            .toList()
+        : _selectedDate != null && _selectedDateImages.isEmpty
+            ? [] // No damage data for selected date
+            : images;
+
     // Analyze damage by van side
     Map<String, int> sideDamageRatings = {
       'front': 0,
@@ -1942,7 +3053,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     };
 
     // Find the highest damage rating for each side
-    for (final image in images) {
+    for (final image in dataToUse) {
       final side = image['van_side']?.toString() ?? 'unknown';
       final rating = image['van_rating'] as int? ?? 0;
 
@@ -1962,9 +3073,11 @@ class _VanProfileScreenState extends State<VanProfileScreen>
       ),
       child: Column(
         children: [
-          const Text(
-            '🚐 Van Damage Overview',
-            style: TextStyle(
+          Text(
+            _selectedDate != null && _selectedDateImages.isNotEmpty
+                ? '🚐 Van Damage Overview (Selected Date)'
+                : '🚐 Van Damage Overview',
+            style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
@@ -1972,7 +3085,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
           const SizedBox(height: 12),
 
           // Horizontal row of van side indicators
-          Container(
+          SizedBox(
             height: 200,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -2330,7 +3443,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   }
 
   Widget _buildFrontView(bool isSmall) {
-    return Container(
+    return SizedBox(
       width: isSmall ? 40 : 60,
       height: isSmall ? 30 : 40,
       child: Stack(
@@ -2347,7 +3460,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
           Positioned(
             left: 8,
             top: 12,
-            child: Container(
+            child: SizedBox(
               width: 35,
               height: 12,
               child: Row(
@@ -2408,7 +3521,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   }
 
   Widget _buildRearView(bool isSmall) {
-    return Container(
+    return SizedBox(
       width: isSmall ? 40 : 60,
       height: isSmall ? 30 : 40,
       child: Stack(
@@ -2477,7 +3590,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   }
 
   Widget _buildDriverSide(bool isSmall) {
-    return Container(
+    return SizedBox(
       width: isSmall ? 30 : 45,
       height: isSmall ? 40 : 55,
       child: Stack(
@@ -2564,7 +3677,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   }
 
   Widget _buildPassengerSide(bool isSmall) {
-    return Container(
+    return SizedBox(
       width: isSmall ? 30 : 45,
       height: isSmall ? 40 : 55,
       child: Stack(
@@ -2742,39 +3855,74 @@ class _VanProfileScreenState extends State<VanProfileScreen>
       return;
     }
 
-    // Find images for this specific side
-    final images = vanData!['images'] as List? ?? [];
+    // Use selected date images if a date is selected, otherwise use overall van images
+    List images;
+    if (_selectedDate != null && _selectedDateImages.isNotEmpty) {
+      // Convert selected date images to the format expected by the filtering logic
+      images = _selectedDateImages
+          .map((image) => {
+                'van_side': image.vanSide,
+                'van_rating': image.damageLevel,
+                'image_url': image.imageUrl,
+                'id': image.id,
+              })
+          .toList();
+      print('🔍 Using selected date images: ${images.length} images');
+      print('🔍 Selected date images data: $images');
+    } else {
+      // Use overall van images
+      images = vanData!['images'] as List? ?? [];
+      print('🔍 Using overall van images: ${images.length} images');
+    }
     final sideImages = images.where((image) {
       final imageSide = image['van_side']?.toString().toLowerCase() ?? '';
       final targetSide = sideLabel.toLowerCase();
 
+      print('🔍 Filtering images for side: $targetSide');
+      print('🔍 Image side: $imageSide');
+      print('🔍 Image data: $image');
+
       // Map side labels to image side values
+      bool matches = false;
       switch (targetSide) {
         case 'front':
-          return imageSide.contains('front') ||
-              imageSide.contains('front_side');
+          matches =
+              imageSide.contains('front') || imageSide.contains('front_side');
+          break;
         case 'rear':
-          return imageSide.contains('rear') ||
+          matches = imageSide.contains('rear') ||
               imageSide.contains('back') ||
               imageSide.contains('rear_side');
+          break;
         case 'driver':
-          return imageSide.contains('driver') ||
-              imageSide.contains('driver_side');
+          matches =
+              imageSide.contains('driver') || imageSide.contains('driver_side');
+          break;
         case 'passenger':
-          return imageSide.contains('passenger') ||
+          matches = imageSide.contains('passenger') ||
               imageSide.contains('passenger_side');
+          break;
         case 'interior':
-          return imageSide.contains('interior') || imageSide.contains('inside');
+          matches =
+              imageSide.contains('interior') || imageSide.contains('inside');
+          break;
         case 'roof':
-          return imageSide.contains('roof') || imageSide.contains('top');
+          matches = imageSide.contains('roof') || imageSide.contains('top');
+          break;
         case 'under':
-          return imageSide.contains('under') ||
+          matches = imageSide.contains('under') ||
               imageSide.contains('undercarriage') ||
               imageSide.contains('bottom');
+          break;
         default:
-          return imageSide.contains(targetSide);
+          matches = imageSide.contains(targetSide);
       }
+
+      print('🔍 Filter result: $matches');
+      return matches;
     }).toList();
+
+    print('🔍 Filtered sideImages count: ${sideImages.length}');
 
     if (sideImages.isNotEmpty) {
       // Find the image with the highest damage rating
@@ -2815,6 +3963,88 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     }
   }
 
+  Widget _buildImageWidgetFromUrl(String imageUrl) {
+    print(
+        '🖼️ _buildImageWidgetFromUrl called with URL: ${imageUrl.substring(0, 50)}...');
+
+    if (imageUrl.startsWith('data:image/')) {
+      // Handle base64 data URL
+      try {
+        print('🖼️ Processing base64 data URL');
+        final parts = imageUrl.split(',');
+        if (parts.length != 2) {
+          print(
+              '❌ Invalid data URL format - expected 2 parts, got ${parts.length}');
+          throw Exception('Invalid data URL format');
+        }
+
+        final base64String = parts[1];
+        print('🖼️ Base64 string length: ${base64String.length}');
+        print('🖼️ Base64 string preview: ${base64String.substring(0, 50)}...');
+
+        final bytes = base64Decode(base64String);
+        print('🖼️ Successfully decoded ${bytes.length} bytes');
+
+        return Image.memory(
+          bytes,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            print('❌ Image.memory error: $error');
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error, size: 64, color: Colors.red),
+                  SizedBox(height: 16),
+                  Text(
+                    'Failed to load image',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      } catch (e) {
+        print('❌ Base64 decode error: $e');
+        return const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error, size: 64, color: Colors.red),
+              SizedBox(height: 16),
+              Text(
+                'Failed to decode image',
+                style: TextStyle(fontSize: 18),
+              ),
+            ],
+          ),
+        );
+      }
+    } else {
+      // Handle regular network URL
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error, size: 64, color: Colors.red),
+                SizedBox(height: 16),
+                Text(
+                  'Failed to load image',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+  }
+
   Widget _buildImageViewer(String imageUrl, Map<String, dynamic> imageData) {
     return Scaffold(
       appBar: AppBar(
@@ -2829,25 +4059,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
           children: [
             Expanded(
               child: InteractiveViewer(
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.error, size: 64, color: Colors.red),
-                          SizedBox(height: 16),
-                          Text(
-                            'Failed to load image',
-                            style: TextStyle(fontSize: 18),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                child: _buildImageWidgetFromUrl(imageUrl),
               ),
             ),
             Container(
@@ -3148,11 +4360,11 @@ class _VanProfileScreenState extends State<VanProfileScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem(
+                _buildImageStatItem(
                     'Total Images', totalImages.toString(), Icons.image),
-                _buildStatItem(
+                _buildImageStatItem(
                     'Drivers', uniqueDrivers.length.toString(), Icons.people),
-                _buildStatItem(
+                _buildImageStatItem(
                     'Latest Upload',
                     latestUpload != null
                         ? '${latestUpload.month}/${latestUpload.day}'
@@ -3163,24 +4375,6 @@ class _VanProfileScreenState extends State<VanProfileScreen>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildStatItem(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, size: 32, color: Colors.green[400]),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          textAlign: TextAlign.center,
-        ),
-      ],
     );
   }
 
@@ -3210,20 +4404,29 @@ class _VanProfileScreenState extends State<VanProfileScreen>
       );
     }
 
-    // Group images by driver
-    Map<String, List<Map<String, dynamic>>> imagesByDriver = {};
+    // Group images by date
+    Map<String, List<Map<String, dynamic>>> imagesByDate = {};
     for (final image in images) {
-      final driverProfile = image['driver_profiles'] as Map<String, dynamic>?;
-      final driverName = driverProfile?['driver_name']?.toString() ??
-          driverProfile?['slack_real_name']?.toString() ??
-          'Unknown Driver';
-      final driverId = driverProfile?['id']?.toString() ?? 'unknown';
+      final createdAt = image['created_at']?.toString();
+      if (createdAt != null) {
+        try {
+          final date = DateTime.parse(createdAt);
+          final dateKey =
+              '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-      if (!imagesByDriver.containsKey(driverId)) {
-        imagesByDriver[driverId] = [];
+          if (!imagesByDate.containsKey(dateKey)) {
+            imagesByDate[dateKey] = [];
+          }
+          imagesByDate[dateKey]!.add(Map<String, dynamic>.from(image));
+        } catch (e) {
+          print('Error parsing date: $createdAt');
+        }
       }
-      imagesByDriver[driverId]!.add(Map<String, dynamic>.from(image));
     }
+
+    // Sort dates in descending order (newest first)
+    final sortedDates = imagesByDate.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3232,7 +4435,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              '📷 Images by Driver (${images.length})',
+              '📷 Images by Date (${images.length})',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             // Test button to verify EnhancedImageViewer works
@@ -3264,15 +4467,41 @@ class _VanProfileScreenState extends State<VanProfileScreen>
               ),
           ],
         ),
-        const SizedBox(height: 12),
-        ...imagesByDriver.entries
-            .map((entry) => _buildDriverImageGroup(entry.key, entry.value)),
+        const SizedBox(height: 16),
+        // Date-based scroll wheel
+        SizedBox(
+          height: 320,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: sortedDates.length,
+            itemBuilder: (context, index) {
+              final dateKey = sortedDates[index];
+              final dateImages = imagesByDate[dateKey]!;
+              final date = DateTime.parse(dateKey);
+              final isSelected = _selectedDate != null &&
+                  _selectedDate!.year == date.year &&
+                  _selectedDate!.month == date.month &&
+                  _selectedDate!.day == date.day;
+
+              return _buildDateImageGroup(dateKey, dateImages, isSelected);
+            },
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildDriverImageGroup(
       String driverId, List<Map<String, dynamic>> images) {
+    debugPrint('🎯 _buildDriverImageGroup called:');
+    debugPrint('🎯 driverId: $driverId');
+    debugPrint('🎯 images.length: ${images.length}');
+    if (images.isNotEmpty) {
+      debugPrint('🎯 First image ID: ${images.first['id']}');
+      debugPrint('🎯 First image uploaded_at: ${images.first['uploaded_at']}');
+      debugPrint('🎯 First image created_at: ${images.first['created_at']}');
+    }
+
     final driverProfile =
         images.first['driver_profiles'] as Map<String, dynamic>?;
     final driverName = driverProfile?['driver_name']?.toString() ??
@@ -3338,65 +4567,55 @@ class _VanProfileScreenState extends State<VanProfileScreen>
             const SizedBox(height: 12),
             SizedBox(
               height: 120, // Increased height for button
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: images.length > 5 ? 5 : images.length,
-                itemBuilder: (context, index) {
-                  final image = images[index];
-                  return Container(
-                    width: 120, // Increased width for button
-                    margin: const EdgeInsets.only(right: 8),
-                    child: Column(
-                      children: [
-                        // Image display
-                        Expanded(
-                          flex: 3,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: _buildImageWidget(image),
-                          ),
+              child: Builder(
+                builder: (context) {
+                  debugPrint(
+                      '🎯 ListView.builder: images.length = ${images.length}');
+                  debugPrint(
+                      '🎯 ListView.builder: itemCount = ${images.length > 5 ? 5 : images.length}');
+                  return ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: images.length > 5 ? 5 : images.length,
+                    itemBuilder: (context, index) {
+                      final image = images[index];
+                      final vanImage = _convertToVanImage(image);
+                      final canDelete = vanImage.canBeDeleted;
+
+                      return Container(
+                        width: 120, // Increased width for button
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          border: canDelete
+                              ? Border.all(
+                                  color: ModernPremiumTheme.errorHotPink,
+                                  width: 2,
+                                )
+                              : null,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        const SizedBox(height: 4),
-                        // Individual image damage assessment
-                        _buildIndividualImageDamageAssessment(image),
-                        const SizedBox(height: 4),
-                        // Guaranteed working button
-                        Expanded(
-                          flex: 1,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: ModernPremiumButton(
-                              text: 'VIEW',
-                              onPressed: () {
-                                debugPrint(
-                                    '🚀 VIEW BUTTON: Pressed for image ${image['id']}');
-                                final allImages =
-                                    vanData!['images'] as List? ?? [];
-                                final imageList =
-                                    allImages.cast<Map<String, dynamic>>();
-                                final selectedIndex = imageList.indexWhere(
-                                    (img) => img['id'] == image['id']);
-
-                                debugPrint(
-                                    '📷 Opening viewer with ${imageList.length} images, index: $selectedIndex');
-
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) => EnhancedImageViewer(
-                                      images: imageList,
-                                      initialIndex: selectedIndex >= 0
-                                          ? selectedIndex
-                                          : 0,
-                                      title: 'Van #${widget.vanNumber} Images',
-                                    ),
-                                  ),
-                                );
-                              },
+                        child: Column(
+                          children: [
+                            // Image display
+                            Expanded(
+                              flex: 3,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: _buildImageWidget(image),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 4),
+                            // Individual image damage assessment
+                            _buildIndividualImageDamageAssessment(image),
+                            const SizedBox(height: 4),
+                            // Action buttons (VIEW and DELETE if deletable)
+                            Expanded(
+                              flex: 1,
+                              child: _buildImageActionButtons(image),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 },
               ),
@@ -3415,6 +4634,482 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     );
   }
 
+  Widget _buildDateImageGroup(
+      String dateKey, List<Map<String, dynamic>> images, bool isSelected) {
+    final date = DateTime.parse(dateKey);
+    final formattedDate = '${date.month}/${date.day}/${date.year}';
+    final imageCount = images.length;
+
+    // Get the highest damage level for this date
+    int maxDamageLevel = 0;
+    for (final image in images) {
+      final rating = image['van_rating'] as int? ?? 0;
+      if (rating > maxDamageLevel) {
+        maxDamageLevel = rating;
+      }
+    }
+
+    // Get driver information from the first image
+    String driverName = 'Unknown Driver';
+    if (images.isNotEmpty) {
+      final driverProfile =
+          images.first['driver_profiles'] as Map<String, dynamic>?;
+      driverName = driverProfile?['driver_name']?.toString() ??
+          driverProfile?['slack_real_name']?.toString() ??
+          'Unknown Driver';
+    }
+
+    // Create a PageController for this date group
+    final pageController = PageController();
+
+    return Container(
+      width: 220,
+      margin: const EdgeInsets.only(right: 16),
+      child: ModernPremiumCard(
+        enableGlass: true,
+        enableNeonEffect: true,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: isSelected
+                ? Border.all(color: ModernPremiumTheme.primaryNeon, width: 2)
+                : null,
+            gradient: isSelected
+                ? LinearGradient(
+                    colors: [
+                      ModernPremiumTheme.primaryNeon.withOpacity(0.1),
+                      ModernPremiumTheme.cosmicPurple.withOpacity(0.1),
+                    ],
+                  )
+                : null,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Date header with damage indicator
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        formattedDate,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? ModernPremiumTheme.primaryNeon
+                              : Colors.white,
+                        ),
+                      ),
+                    ),
+                    if (maxDamageLevel > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _getDamageLevelColor(maxDamageLevel),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'L$maxDamageLevel',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                // Driver information
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 8,
+                      backgroundColor: Colors.green[400],
+                      child: Text(
+                        driverName[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        driverName,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[300],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                // Image count
+                Text(
+                  '$imageCount image${imageCount != 1 ? 's' : ''}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[400],
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Image thumbnails with swipe functionality
+                SizedBox(
+                  height: 90,
+                  child: images.length > 1
+                      ? PageView.builder(
+                          controller: pageController,
+                          scrollDirection: Axis.horizontal,
+                          allowImplicitScrolling: true,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: images.length,
+                          itemBuilder: (context, index) {
+                            final image = images[index];
+                            final rating = image['van_rating'] as int? ?? 0;
+                            final vanSide =
+                                image['van_side']?.toString() ?? 'unknown';
+
+                            return Container(
+                              width: 90,
+                              height: 90,
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _getDamageLevelColor(rating),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _getDamageLevelColor(rating)
+                                        .withOpacity(0.3),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: _buildImageWidget(image),
+                                  ),
+                                  // Damage level badge
+                                  Positioned(
+                                    top: 2,
+                                    right: 2,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: _getDamageLevelColor(rating),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'L$rating',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  // Van side indicator
+                                  Positioned(
+                                    bottom: 2,
+                                    left: 2,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 3, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.7),
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                      child: Text(
+                                        vanSide.toUpperCase().substring(0, 3),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  // Image counter indicator
+                                  if (images.length > 1)
+                                    Positioned(
+                                      top: 2,
+                                      left: 2,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.7),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          '${index + 1}/${images.length}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        )
+                      : images.isNotEmpty
+                          ? Center(
+                              child: Container(
+                                width: 90,
+                                height: 90,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: _getDamageLevelColor(
+                                        images[0]['van_rating'] as int? ?? 0),
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _getDamageLevelColor(
+                                              images[0]['van_rating'] as int? ??
+                                                  0)
+                                          .withOpacity(0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: _buildImageWidget(images[0]),
+                                    ),
+                                    // Damage level badge
+                                    Positioned(
+                                      top: 2,
+                                      right: 2,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: _getDamageLevelColor(
+                                              images[0]['van_rating'] as int? ??
+                                                  0),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          'L${images[0]['van_rating'] as int? ?? 0}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    // Van side indicator
+                                    Positioned(
+                                      bottom: 2,
+                                      left: 2,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 3, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.7),
+                                          borderRadius:
+                                              BorderRadius.circular(3),
+                                        ),
+                                        child: Text(
+                                          (images[0]['van_side']?.toString() ??
+                                                  'unknown')
+                                              .toUpperCase()
+                                              .substring(0, 3),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                ),
+
+                const SizedBox(height: 4),
+
+                // Navigation controls for multiple images
+                if (images.length > 1)
+                  Column(
+                    children: [
+                      // Arrow buttons row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          // Left arrow button
+                          GestureDetector(
+                            onTap: () {
+                              // Navigate to previous image
+                              if (pageController.hasClients) {
+                                pageController.previousPage(
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.cyan[300]?.withOpacity(0.3)
+                                    : Colors.grey[400]?.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Colors.cyan[300]!
+                                      : Colors.grey[400]!,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.chevron_left,
+                                size: 16,
+                                color: isSelected
+                                    ? Colors.cyan[300]
+                                    : Colors.grey[400],
+                              ),
+                            ),
+                          ),
+                          // Right arrow button
+                          GestureDetector(
+                            onTap: () {
+                              // Navigate to next image
+                              if (pageController.hasClients) {
+                                pageController.nextPage(
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.cyan[300]?.withOpacity(0.3)
+                                    : Colors.grey[400]?.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Colors.cyan[300]!
+                                      : Colors.grey[400]!,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.chevron_right,
+                                size: 16,
+                                color: isSelected
+                                    ? Colors.cyan[300]
+                                    : Colors.grey[400],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      // Swipe hint
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.swipe_left,
+                            size: 14,
+                            color: isSelected
+                                ? Colors.cyan[300]
+                                : Colors.grey[400],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Swipe or click arrows',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: isSelected
+                                  ? Colors.cyan[300]
+                                  : Colors.grey[400],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                if (images.length > 1) const SizedBox(height: 2),
+
+                // View button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final imageList = images.cast<Map<String, dynamic>>();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => EnhancedImageViewer(
+                            images: imageList,
+                            initialIndex: 0,
+                            title: 'Van #${widget.vanNumber} - $formattedDate',
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.visibility, size: 14),
+                    label: const Text('VIEW', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSelected
+                          ? ModernPremiumTheme.primaryNeon
+                          : Colors.blue[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Color _getDamageRatingColor(int rating) {
     switch (rating) {
       case 0:
@@ -3428,6 +5123,148 @@ class _VanProfileScreenState extends State<VanProfileScreen>
       default:
         return Colors.grey[600]!;
     }
+  }
+
+  /// Convert raw image data to VanImage model for deletion functionality
+  VanImage _convertToVanImage(Map<String, dynamic> imageData) {
+    debugPrint('🗑️ === DELETION DEBUG ===');
+    debugPrint('🗑️ Image ID: ${imageData['id']}');
+    debugPrint('🗑️ Raw uploaded_at: ${imageData['uploaded_at']}');
+    debugPrint('🗑️ Raw created_at: ${imageData['created_at']}');
+    debugPrint('🗑️ Raw uploaded_by: ${imageData['uploaded_by']}');
+
+    final uploadedAt = imageData['uploaded_at'] != null
+        ? DateTime.parse(imageData['uploaded_at']).toUtc()
+        : (imageData['created_at'] != null
+            ? DateTime.parse(imageData['created_at']).toUtc()
+            : DateTime.now().toUtc());
+
+    debugPrint('🗑️ Parsed uploadedAt: $uploadedAt');
+    debugPrint('🗑️ uploadedAt.isUtc: ${uploadedAt.isUtc}');
+    debugPrint('🗑️ Current time UTC: ${DateTime.now().toUtc()}');
+    debugPrint('🗑️ Current time UTC.isUtc: ${DateTime.now().toUtc().isUtc}');
+    debugPrint(
+        '🗑️ Time difference (UTC): ${DateTime.now().toUtc().difference(uploadedAt)}');
+    debugPrint(
+        '🗑️ Minutes since upload: ${DateTime.now().toUtc().difference(uploadedAt).inMinutes}');
+
+    final vanImage = VanImage(
+      id: imageData['id']?.toString() ?? '',
+      vanId: imageData['van_id']?.toString() ?? '',
+      imageUrl: imageData['image_url']?.toString() ??
+          imageData['image_data']?.toString() ??
+          '',
+      uploadedBy: imageData['uploaded_by']?.toString(),
+      driverId: imageData['driver_id']?.toString(),
+      uploadedAt: uploadedAt,
+      description: imageData['description']?.toString(),
+      damageType: imageData['damage_type']?.toString(),
+      damageLevel: imageData['van_rating']?.toInt(),
+      location: imageData['location']?.toString(),
+      vanSide: imageData['van_side']?.toString(),
+      vanDamage: imageData['van_damage']?.toString(),
+      createdAt: imageData['created_at'] != null
+          ? DateTime.parse(imageData['created_at'])
+          : DateTime.now(),
+      updatedAt: imageData['updated_at'] != null
+          ? DateTime.parse(imageData['updated_at'])
+          : DateTime.now(),
+      vanNumber: imageData['van_number']?.toString(),
+    );
+
+    debugPrint('🗑️ canBeDeleted: ${vanImage.canBeDeleted}');
+    debugPrint('🗑️ remainingTime: ${vanImage.remainingDeletionTimeFormatted}');
+    debugPrint('🗑️ === END DELETION DEBUG ===');
+
+    return vanImage;
+  }
+
+  /// Show deletion dialog for an image
+  void _showDeleteImageDialog(Map<String, dynamic> imageData) {
+    final vanImage = _convertToVanImage(imageData);
+    showDialog(
+      context: context,
+      builder: (context) => VanImageDeletionDialog(
+        vanImage: vanImage,
+        onDeleted: () {
+          // Refresh the van profile data
+          _loadVanData();
+        },
+      ),
+    );
+  }
+
+  /// Build action buttons for each image (VIEW and DELETE if deletable)
+  Widget _buildImageActionButtons(Map<String, dynamic> image) {
+    debugPrint('🎯 _buildImageActionButtons called for image: ${image['id']}');
+    final vanImage = _convertToVanImage(image);
+    final canDelete = vanImage.canBeDeleted;
+    debugPrint('🎯 canDelete: $canDelete');
+
+    if (canDelete) {
+      // Show both VIEW and DELETE buttons for deletable images
+      return Row(
+        children: [
+          Expanded(
+            child: ModernPremiumButton(
+              text: 'VIEW',
+              onPressed: () => _openImageViewer(image),
+              isSecondary: true,
+              height: 32,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _showDeleteImageDialog(image),
+              icon: const Icon(Icons.timer, size: 12),
+              label: Text(
+                vanImage.remainingDeletionTimeFormatted,
+                style: const TextStyle(fontSize: 10),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ModernPremiumTheme.errorHotPink,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                minimumSize: const Size(0, 32),
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Show only VIEW button for non-deletable images
+      return SizedBox(
+        width: double.infinity,
+        child: ModernPremiumButton(
+          text: 'VIEW',
+          onPressed: () => _openImageViewer(image),
+          height: 32,
+        ),
+      );
+    }
+  }
+
+  /// Open the image viewer for a specific image
+  void _openImageViewer(Map<String, dynamic> image) {
+    debugPrint('🚀 VIEW BUTTON: Pressed for image ${image['id']}');
+    final allImages = vanData!['images'] as List? ?? [];
+    final imageList = allImages.cast<Map<String, dynamic>>();
+    final selectedIndex =
+        imageList.indexWhere((img) => img['id'] == image['id']);
+
+    debugPrint(
+        '📷 Opening viewer with ${imageList.length} images, index: $selectedIndex');
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => EnhancedImageViewer(
+          images: imageList,
+          initialIndex: selectedIndex >= 0 ? selectedIndex : 0,
+          title: 'Van #${widget.vanNumber} Images',
+        ),
+      ),
+    );
   }
 
   Widget _buildImageWidget(Map<String, dynamic> image) {
@@ -3649,42 +5486,6 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     );
   }
 
-  void _openImageViewer(Map<String, dynamic> selectedImage) {
-    debugPrint(
-        '🔍 VAN PROFILE: _openImageViewer called for image: ${selectedImage['id']}');
-    debugPrint('🔍 VAN PROFILE: selectedImage data: $selectedImage');
-
-    final images = vanData!['images'] as List? ?? [];
-    debugPrint('🔍 VAN PROFILE: vanData images: $images');
-
-    final imageList = images.cast<Map<String, dynamic>>();
-    final selectedIndex =
-        imageList.indexWhere((img) => img['id'] == selectedImage['id']);
-
-    debugPrint(
-        '📷 VAN PROFILE: Total images: ${imageList.length}, Selected index: $selectedIndex');
-
-    if (imageList.isNotEmpty) {
-      debugPrint('🚀 VAN PROFILE: Navigating to EnhancedImageViewer...');
-      try {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => EnhancedImageViewer(
-              images: imageList,
-              initialIndex: selectedIndex >= 0 ? selectedIndex : 0,
-              title: 'Van #${widget.vanNumber} Images',
-            ),
-          ),
-        );
-        debugPrint('✅ VAN PROFILE: Navigation successful!');
-      } catch (e) {
-        debugPrint('❌ VAN PROFILE: Navigation error: $e');
-      }
-    } else {
-      debugPrint('❌ VAN PROFILE: No images available to display');
-    }
-  }
-
   void _navigateToDriverProfile(String driverId, String driverName) {
     Navigator.push(
       context,
@@ -3763,7 +5564,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
               ),
             );
           },
-          child: Container(
+          child: SizedBox(
             width: 100,
             height: 100,
             child: ClipRRect(
@@ -3922,6 +5723,57 @@ class _VanProfileScreenState extends State<VanProfileScreen>
     int moderateDamage = 0;
     int majorDamage = 0;
 
+    // Handle case when there are no images
+    if (totalImages == 0) {
+      return ModernPremiumCard(
+        enableGlass: true,
+        enableNeonEffect: true,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.analytics, color: Colors.grey[600], size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Damage Statistics',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.grey[600], size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'No images uploaded for this van yet',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     for (final image in images) {
       final damageLevel = image['van_rating'] as int? ?? 0;
       switch (damageLevel) {
@@ -3981,7 +5833,9 @@ class _VanProfileScreenState extends State<VanProfileScreen>
   }
 
   Widget _buildDamageLevelBar(String label, int count, int total, Color color) {
-    final percentage = total > 0 ? (count / total) : 0.0;
+    // Safety check to prevent NaN
+    final percentage = (total > 0 && count >= 0) ? (count / total) : 0.0;
+    final safePercentage = percentage.isNaN ? 0.0 : percentage;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4016,7 +5870,7 @@ class _VanProfileScreenState extends State<VanProfileScreen>
           ),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft,
-            widthFactor: percentage,
+            widthFactor: safePercentage,
             child: Container(
               decoration: BoxDecoration(
                 color: color,
